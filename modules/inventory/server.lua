@@ -44,7 +44,9 @@ function Bridge.AddItem(source, item, count, metadata, slot)
 
     if inventorySystem == 'ox_inventory' then
         return exports.ox_inventory:AddItem(source, item, count, metadata, slot)
-    elseif inventorySystem == 'qb-inventory' or inventorySystem == 'qs-inventory' then
+    elseif inventorySystem == 'qs-inventory' then
+        return exports['qs-inventory']:AddItem(source, item, count, slot, metadata)
+    elseif inventorySystem == 'qb-inventory' then
         if Bridge.Framework == 'QBCore' then
             local player = Bridge.GetPlayer(source)
             if player then
@@ -79,7 +81,10 @@ function Bridge.RemoveItem(source, item, count, metadata, slot)
     if inventorySystem == 'ox_inventory' then
         local success = exports.ox_inventory:RemoveItem(source, item, count, metadata, slot)
         return success ~= false
-    elseif inventorySystem == 'qb-inventory' or inventorySystem == 'qs-inventory' then
+    elseif inventorySystem == 'qs-inventory' then
+        exports['qs-inventory']:RemoveItem(source, item, count, slot, metadata)
+        return true
+    elseif inventorySystem == 'qb-inventory' then
         if Bridge.Framework == 'QBCore' then
             local player = Bridge.GetPlayer(source)
             if player then
@@ -112,7 +117,10 @@ function Bridge.HasItem(source, item, count)
     if inventorySystem == 'ox_inventory' then
         local itemCount = exports.ox_inventory:GetItemCount(source, item)
         return itemCount and itemCount >= count or false
-    elseif inventorySystem == 'qb-inventory' or inventorySystem == 'qs-inventory' then
+    elseif inventorySystem == 'qs-inventory' then
+        local totalAmount = exports['qs-inventory']:GetItemTotalAmount(source, item)
+        return totalAmount and totalAmount >= count or false
+    elseif inventorySystem == 'qb-inventory' then
         if Bridge.Framework == 'QBCore' then
             local player = Bridge.GetPlayer(source)
             if player then
@@ -147,6 +155,8 @@ function Bridge.CanCarry(source, item, count, metadata)
 
     if inventorySystem == 'ox_inventory' then
         return exports.ox_inventory:CanCarryItem(source, item, count, metadata)
+    elseif inventorySystem == 'qs-inventory' then
+        return exports['qs-inventory']:CanCarryItem(source, item, count)
     else
         local player = Bridge.GetPlayer(source)
         if player then
@@ -191,6 +201,8 @@ function Bridge.RegisterStash(stashId, label, jobName, coords)
             groups,
             coords
         )
+    elseif inventorySystem == 'qs-inventory' then
+        exports['qs-inventory']:RegisterStash(stashId, slots, maxWeight)
     end
 
     registeredStashes[stashId] = true
@@ -209,6 +221,8 @@ end
 function Bridge.ForceOpenStash(source, stashId)
     if inventorySystem == 'ox_inventory' then
         exports.ox_inventory:forceOpenInventory(source, 'stash', stashId)
+    elseif inventorySystem == 'qs-inventory' then
+        TriggerClientEvent('inventory:server:OpenInventory', source, 'stash', stashId)
     end
 end
 
@@ -241,6 +255,8 @@ end
 function Bridge.GetAllItems()
     if inventorySystem == 'ox_inventory' then
         return exports.ox_inventory:Items() or {}
+    elseif inventorySystem == 'qs-inventory' then
+        return exports['qs-inventory']:GetItemList() or {}
     elseif Bridge.Framework == 'QBCore' then
         return Bridge.FrameworkObject.Shared.Items or {}
     end

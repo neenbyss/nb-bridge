@@ -53,6 +53,9 @@ function Bridge.GetItemCount(item)
     if inventorySystem == 'ox_inventory' then
         local count = exports.ox_inventory:GetItemCount(item)
         return count or 0
+    elseif inventorySystem == 'qs-inventory' then
+        local result = exports['qs-inventory']:Search(item)
+        return result or 0
     elseif Bridge.Framework == 'QBCore' then
         local playerData = Bridge.GetPlayerData()
         if playerData and playerData.items then
