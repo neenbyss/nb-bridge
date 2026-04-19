@@ -26,6 +26,6 @@ BridgeConfig = {
         ['ps-inventory']  = 'nui://ps-inventory/html/images/%s.png',
         ['lj-inventory']  = 'nui://lj-inventory/html/images/%s.png',
         ['qs-inventory']  = 'nui://qs-inventory/html/images/%s.png',
-        origen_inventory  = 'nui://origen_inventory/ui/images/%s.png',
+        origen_inventory  = 'nui://origen_inventory/html/images/%s.png',
     },
 }

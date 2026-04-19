@@ -10,6 +10,16 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [1.2.1] — 2026-04-19
+
+### Fixed
+
+- **origen_inventory image path** — `BridgeConfig.InventoryImagePaths.origen_inventory` was pointing at `ui/images/`, which is not where origen_inventory serves item icons. Corrected to `html/images/` to match the canonical convention used across the inventory's NUI.
+
+This is a cosmetic fix — item icons now render correctly on servers using origen_inventory without having to override the bridge config manually. Existing consumers (nb-consumibles, nb-shops, nb-restaurants) benefit immediately.
+
+---
+
 ## [1.2.0] — 2026-04-19
 
 ### Added
@@ -73,6 +83,7 @@ First public release.
 
 ---
 
+[1.2.1]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.1
 [1.2.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.0
 [1.1.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.1.0
 [1.0.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.0.0
