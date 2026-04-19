@@ -10,6 +10,26 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [1.2.2] — 2026-04-19
+
+### Changed
+
+- **origen_inventory default path is now `ui/images/`** (origen v2 branch). Origen ships in two NUI layouts and there is no reliable way to autodetect which branch a server runs; we now default to v2 (the current branch) and document how to override back to v1 from the consumer script.
+
+### If you run origen_inventory v1
+
+Add this to your consumer script's `Config.InventoryImagePaths`:
+
+```lua
+Config.InventoryImagePaths = {
+    origen_inventory = 'nui://origen_inventory/html/images/%s.png',
+}
+```
+
+The path change in v1.2.1 assumed a single canonical layout — that assumption was wrong. v1.2.2 reverts the default and explains the branch choice in `config.lua`.
+
+---
+
 ## [1.2.1] — 2026-04-19
 
 ### Fixed
@@ -83,6 +103,7 @@ First public release.
 
 ---
 
+[1.2.2]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.2
 [1.2.1]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.1
 [1.2.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.0
 [1.1.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.1.0
