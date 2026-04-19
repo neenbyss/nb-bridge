@@ -264,6 +264,49 @@ function Bridge.GetAllItems()
 end
 
 -- ================================================
+-- USABLE ITEMS
+-- Abstracts ESX.RegisterUsableItem and
+-- QBCore.Functions.CreateUseableItem.
+-- ox_inventory scripts should use its native
+-- `exports.ox_inventory:registerHook` or the
+-- server.lua `useItem` flow — this bridge routes
+-- through the framework layer (QBCore/ESX) which
+-- ox_inventory itself piggy-backs on.
+-- ================================================
+
+local registeredUsable = {}
+
+---Register a usable item handler. Callback receives (source, item) where
+---`item` is framework-provided metadata (at minimum { name = string, slot = number? }).
+---@param itemName string
+---@param cb fun(source: number, item: table)
+---@return boolean success
+function Bridge.RegisterUsableItem(itemName, cb)
+    if not itemName or type(cb) ~= 'function' then return false end
+    registeredUsable[itemName] = cb
+
+    if Bridge.Framework == 'ESX' then
+        Bridge.FrameworkObject.RegisterUsableItem(itemName, function(source, itemSlot)
+            cb(source, { name = itemName, slot = itemSlot })
+        end)
+        return true
+    elseif Bridge.Framework == 'QBCore' then
+        Bridge.FrameworkObject.Functions.CreateUseableItem(itemName, function(source, item)
+            cb(source, item or { name = itemName })
+        end)
+        return true
+    end
+    return false
+end
+
+---Check if an item is registered as usable through the bridge
+---@param itemName string
+---@return boolean
+function Bridge.IsUsableItemRegistered(itemName)
+    return registeredUsable[itemName] ~= nil
+end
+
+-- ================================================
 -- EXPORTS
 -- ================================================
 
@@ -277,4 +320,6 @@ if not _BRIDGE_LOADER then
     exports('ForceOpenStash', function(...) return Bridge.ForceOpenStash(...) end)
     exports('ForceOpenPlayerInventory', function(...) return Bridge.ForceOpenPlayerInventory(...) end)
     exports('GetAllItems', function(...) return Bridge.GetAllItems(...) end)
+    exports('RegisterUsableItem', function(...) return Bridge.RegisterUsableItem(...) end)
+    exports('IsUsableItemRegistered', function(...) return Bridge.IsUsableItemRegistered(...) end)
 end
