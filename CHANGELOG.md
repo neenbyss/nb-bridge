@@ -1,0 +1,58 @@
+# Changelog
+
+All notable changes to **nb-bridge** are documented in this file.
+
+The project follows [Semantic Versioning](https://semver.org/):
+
+- **MAJOR** — incompatible API changes
+- **MINOR** — new functionality, backwards-compatible
+- **PATCH** — bug fixes, backwards-compatible
+
+---
+
+## [1.1.0] — 2026-04-19
+
+### Added
+
+- **`Bridge.RegisterUsableItem(itemName, handler)`** — unified wrapper around `ESX.RegisterUsableItem` and `QBCore.Functions.CreateUseableItem`. Your callback receives `(source, { name, slot })` regardless of the framework, so consumer resources (like **nb-consumibles**) can register usable items once and work on both stacks.
+- **`Bridge.IsUsableItemRegistered(itemName)`** — boolean lookup to check if an item was already registered through the bridge (useful for hot-reload flows that re-register items on config change).
+- **qs-inventory support** in the inventory module — now auto-detected alongside `ox_inventory`, `qb-inventory` and the framework defaults. `AddItem`, `RemoveItem`, `HasItem`, `CanCarry`, `RegisterStash` and `ForceOpenStash` route through qs-inventory when it is the active inventory system.
+- `Bridge.InventorySystem = 'qs-inventory'` is now a valid value for scripts that branch on inventory detection.
+
+### Changed
+
+- Internal registration ledger inside the inventory module prevents double-registration of the same usable item across reloads.
+
+### Compatibility
+
+- **Fully backwards-compatible** with 1.0.0. No renames, no signature changes.
+- Consumers that require the new usable-item API (e.g. **nb-consumibles**) should declare `nb-bridge` >= 1.1.0 in their docs.
+
+---
+
+## [1.0.0] — 2026-04-03
+
+First public release.
+
+### Added
+
+- **Framework auto-detection** — ESX Legacy and QBCore detected at boot, exposed as `Bridge.Framework` and `Bridge.FrameworkObject`.
+- **Framework module** — unified API for players, permissions, money (cash/bank), jobs, gangs, metadata, playtime, teleport, billing, coords, player vars, command execution and the `OnPlayerLoaded` event.
+- **Inventory module** — abstraction over `ox_inventory`, `qb-inventory` and framework defaults. Covers item CRUD, stash registration, force-open flows and the full items catalog.
+- **Notify module** — `Bridge.Notify` (server) and `Bridge.ShowNotification` (client) with auto-detection of ox_lib, ESX, QBCore and GTA native fallbacks.
+- **Vehicle module** — plate normalization and generation, vehicle spawning, vehicle properties, owner lookups and DB insertion for `owned_vehicles` / `player_vehicles`.
+- **Callbacks module** — `Bridge.CreateCallback` / `Bridge.TriggerServerCallback` without manual exports. Namespaced names per resource to avoid collisions.
+- **Licenses module** (server) — identity and license retrieval with auto-detection of `bcs_licensemanager`, `okokLicenses`, `esx_license` and QBCore metadata.
+- **Progress module** (client) — progress bar with `ox_lib` when present, native animation fallback otherwise.
+- **Config cascade** — consumer `Config` takes priority over `BridgeConfig`. Works for `AdminGroups`, `Stash`, `Debug`, etc.
+- **Overrides folder** — drop `.lua` files under `overrides/client/` or `overrides/server/` to replace any `Bridge.*` function without editing the base resource.
+- **Exports** — every Bridge function is also published as `exports['nb-bridge']:FuncName` for third-party scripts.
+
+### Notes
+
+- All `nb-*` resources now depend on this package, eliminating the duplicated `bridge/` folder in each one.
+
+---
+
+[1.1.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.1.0
+[1.0.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.0.0
