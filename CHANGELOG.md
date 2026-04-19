@@ -10,6 +10,25 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [1.2.0] — 2026-04-19
+
+### Added
+
+- **`origen_inventory` support** in the inventory module. Detected automatically alongside `ox_inventory`, `qb-inventory` and `qs-inventory`. `Bridge.InventorySystem == 'origen_inventory'` is a valid value.
+- `Bridge.AddItem`, `Bridge.RemoveItem`, `Bridge.HasItem`, `Bridge.CanCarry` — routed through `exports.origen_inventory:addItem/removeItem/getItemCount/canCarryItem`.
+- `Bridge.RegisterStash` — uses `exports.origen_inventory:registerStash(id, { label, slots, weight })` with the stash defaults from `Config.Stash` / `BridgeConfig.Stash`.
+- `Bridge.ForceOpenStash` and `Bridge.ForceOpenPlayerInventory` — origen opens from the client, so the bridge now relays the request via the `nb-bridge:client:origenOpenInventory` event.
+- `Bridge.GetAllItems` — reads the runtime item list from `exports.origen_inventory:Items()`.
+- `Bridge.OpenStash`, `Bridge.OpenPlayerInventory`, `Bridge.GetItemCount` (client) — wired to `openInventory` and `Search('count', item)`.
+- `Bridge.RegisterUsableItem` — additionally wires the handler through `exports.origen_inventory:CreateUseableItem` when origen is active, so "use" works regardless of which side triggers it.
+
+### Compatibility
+
+- **Fully backwards-compatible** with 1.1.0 — no renames, no signature changes.
+- Requires `origen_inventory` only when your server uses it; the detection is opt-in.
+
+---
+
 ## [1.1.0] — 2026-04-19
 
 ### Added
@@ -54,5 +73,6 @@ First public release.
 
 ---
 
+[1.2.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.0
 [1.1.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.1.0
 [1.0.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.0.0

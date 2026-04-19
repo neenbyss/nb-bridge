@@ -16,6 +16,8 @@ CreateThread(function()
         inventorySystem = 'qb-inventory'
     elseif GetResourceState('qs-inventory') == 'started' then
         inventorySystem = 'qs-inventory'
+    elseif GetResourceState('origen_inventory') == 'started' then
+        inventorySystem = 'origen_inventory'
     else
         inventorySystem = 'default'
     end
@@ -33,6 +35,8 @@ function Bridge.OpenStash(stashId)
     elseif inventorySystem == 'qb-inventory' or inventorySystem == 'qs-inventory' then
         TriggerServerEvent('inventory:server:OpenInventory', 'stash', stashId)
         TriggerEvent('inventory:client:SetCurrentStash', stashId)
+    elseif inventorySystem == 'origen_inventory' then
+        exports.origen_inventory:openInventory('stash', stashId)
     end
 end
 
@@ -43,6 +47,8 @@ function Bridge.OpenPlayerInventory(targetServerId)
         exports.ox_inventory:openInventory('player', targetServerId)
     elseif inventorySystem == 'qb-inventory' or inventorySystem == 'qs-inventory' then
         TriggerServerEvent('inventory:server:OpenInventory', 'otherplayer', targetServerId)
+    elseif inventorySystem == 'origen_inventory' then
+        exports.origen_inventory:openInventory('player', targetServerId)
     end
 end
 
@@ -56,6 +62,11 @@ function Bridge.GetItemCount(item)
     elseif inventorySystem == 'qs-inventory' then
         local result = exports['qs-inventory']:Search(item)
         return result or 0
+    elseif inventorySystem == 'origen_inventory' then
+        local result = exports.origen_inventory:Search('count', item)
+        if type(result) == 'number' then return result end
+        if type(result) == 'table' and result[item] then return result[item] end
+        return 0
     elseif Bridge.Framework == 'QBCore' then
         local playerData = Bridge.GetPlayerData()
         if playerData and playerData.items then
@@ -84,6 +95,17 @@ function Bridge.GetImagePath()
     local paths = BridgeConfig.InventoryImagePaths or {}
     return paths[inventorySystem] or paths['ox_inventory'] or 'nui://ox_inventory/web/images/%s.png'
 end
+
+-- ================================================
+-- ORIGEN_INVENTORY: server-triggered force-open helper.
+-- origen_inventory opens from the client, so server-side
+-- ForceOpenStash / ForceOpenPlayerInventory fire this event
+-- to route the request to the correct client.
+-- ================================================
+RegisterNetEvent('nb-bridge:client:origenOpenInventory', function(invType, id)
+    if inventorySystem ~= 'origen_inventory' then return end
+    exports.origen_inventory:openInventory(invType, id)
+end)
 
 -- ================================================
 -- EXPORTS

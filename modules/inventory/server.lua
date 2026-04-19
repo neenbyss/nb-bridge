@@ -2,7 +2,7 @@
 -- INVENTORY BRIDGE - SERVER
 -- Unified inventory API for multiple systems.
 -- Supports: ox_inventory, qb-inventory, qs-inventory,
---           framework defaults (ESX/QBCore)
+--           origen_inventory, framework defaults (ESX/QBCore)
 -- ================================================
 
 if not IsDuplicityVersion() then return end
@@ -19,6 +19,8 @@ CreateThread(function()
         inventorySystem = 'qb-inventory'
     elseif GetResourceState('qs-inventory') == 'started' then
         inventorySystem = 'qs-inventory'
+    elseif GetResourceState('origen_inventory') == 'started' then
+        inventorySystem = 'origen_inventory'
     else
         inventorySystem = 'default'
     end
@@ -46,6 +48,9 @@ function Bridge.AddItem(source, item, count, metadata, slot)
         return exports.ox_inventory:AddItem(source, item, count, metadata, slot)
     elseif inventorySystem == 'qs-inventory' then
         return exports['qs-inventory']:AddItem(source, item, count, slot, metadata)
+    elseif inventorySystem == 'origen_inventory' then
+        local ok = exports.origen_inventory:addItem(source, item, count, metadata, slot, false)
+        return ok == true
     elseif inventorySystem == 'qb-inventory' then
         if Bridge.Framework == 'QBCore' then
             local player = Bridge.GetPlayer(source)
@@ -84,6 +89,9 @@ function Bridge.RemoveItem(source, item, count, metadata, slot)
     elseif inventorySystem == 'qs-inventory' then
         exports['qs-inventory']:RemoveItem(source, item, count, slot, metadata)
         return true
+    elseif inventorySystem == 'origen_inventory' then
+        local ok = exports.origen_inventory:removeItem(source, item, count, metadata, slot, false)
+        return ok == true
     elseif inventorySystem == 'qb-inventory' then
         if Bridge.Framework == 'QBCore' then
             local player = Bridge.GetPlayer(source)
@@ -120,6 +128,9 @@ function Bridge.HasItem(source, item, count)
     elseif inventorySystem == 'qs-inventory' then
         local totalAmount = exports['qs-inventory']:GetItemTotalAmount(source, item)
         return totalAmount and totalAmount >= count or false
+    elseif inventorySystem == 'origen_inventory' then
+        local itemCount = exports.origen_inventory:getItemCount(source, item, false, false)
+        return type(itemCount) == 'number' and itemCount >= count or false
     elseif inventorySystem == 'qb-inventory' then
         if Bridge.Framework == 'QBCore' then
             local player = Bridge.GetPlayer(source)
@@ -157,6 +168,9 @@ function Bridge.CanCarry(source, item, count, metadata)
         return exports.ox_inventory:CanCarryItem(source, item, count, metadata)
     elseif inventorySystem == 'qs-inventory' then
         return exports['qs-inventory']:CanCarryItem(source, item, count)
+    elseif inventorySystem == 'origen_inventory' then
+        local ok = exports.origen_inventory:canCarryItem(source, item, count, metadata)
+        return ok == true
     else
         local player = Bridge.GetPlayer(source)
         if player then
@@ -203,6 +217,12 @@ function Bridge.RegisterStash(stashId, label, jobName, coords)
         )
     elseif inventorySystem == 'qs-inventory' then
         exports['qs-inventory']:RegisterStash(stashId, slots, maxWeight)
+    elseif inventorySystem == 'origen_inventory' then
+        exports.origen_inventory:registerStash(stashId, {
+            label  = label or stashId,
+            slots  = slots,
+            weight = maxWeight,
+        })
     end
 
     registeredStashes[stashId] = true
@@ -223,6 +243,9 @@ function Bridge.ForceOpenStash(source, stashId)
         exports.ox_inventory:forceOpenInventory(source, 'stash', stashId)
     elseif inventorySystem == 'qs-inventory' then
         TriggerClientEvent('inventory:server:OpenInventory', source, 'stash', stashId)
+    elseif inventorySystem == 'origen_inventory' then
+        -- origen_inventory opens from the client side
+        TriggerClientEvent('nb-bridge:client:origenOpenInventory', source, 'stash', stashId)
     end
 end
 
@@ -244,6 +267,9 @@ function Bridge.ForceOpenPlayerInventory(source, targetServerId)
     elseif inventorySystem == 'qb-inventory' or inventorySystem == 'qs-inventory' then
         TriggerClientEvent('inventory:client:OpenInventory', source, {}, 'otherplayer', targetServerId)
         return true
+    elseif inventorySystem == 'origen_inventory' then
+        TriggerClientEvent('nb-bridge:client:origenOpenInventory', source, 'player', targetServerId)
+        return true
     end
 
     Debugger('Inventory', 'No supported inventory system for ForceOpenPlayerInventory')
@@ -257,6 +283,8 @@ function Bridge.GetAllItems()
         return exports.ox_inventory:Items() or {}
     elseif inventorySystem == 'qs-inventory' then
         return exports['qs-inventory']:GetItemList() or {}
+    elseif inventorySystem == 'origen_inventory' then
+        return exports.origen_inventory:Items() or {}
     elseif Bridge.Framework == 'QBCore' then
         return Bridge.FrameworkObject.Shared.Items or {}
     end
@@ -285,6 +313,20 @@ function Bridge.RegisterUsableItem(itemName, cb)
     if not itemName or type(cb) ~= 'function' then return false end
     registeredUsable[itemName] = cb
 
+    -- origen_inventory has its own usable-item registry. When detected,
+    -- wire the handler through both origen AND the framework so the "use"
+    -- action fires regardless of which side triggers it.
+    if inventorySystem == 'origen_inventory' then
+        local ok = pcall(function()
+            exports.origen_inventory:CreateUseableItem(itemName, function(source, item)
+                cb(source, item or { name = itemName })
+            end)
+        end)
+        if not ok then
+            Debugger('Inventory', 'origen_inventory:CreateUseableItem failed for', itemName)
+        end
+    end
+
     if Bridge.Framework == 'ESX' then
         Bridge.FrameworkObject.RegisterUsableItem(itemName, function(source, itemSlot)
             cb(source, { name = itemName, slot = itemSlot })
@@ -296,7 +338,7 @@ function Bridge.RegisterUsableItem(itemName, cb)
         end)
         return true
     end
-    return false
+    return inventorySystem == 'origen_inventory'
 end
 
 ---Check if an item is registered as usable through the bridge
