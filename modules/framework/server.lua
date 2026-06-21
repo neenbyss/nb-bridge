@@ -630,8 +630,163 @@ function Bridge.player.createBill(src, targetId, amount, description, jobName)
 end
 
 -- ================================================
+-- COMMANDS
+-- ================================================
+
+---Register a chat command with optional permission group and suggestion
+---@param name string Command name (without slash)
+---@param group string|nil Required group ('admin'|'mod'|'god'|nil for all)
+---@param cb function(source, args, rawCommand) Command callback
+---@param suggestion table|nil { help = string, params = { { name, help } } }
+function Bridge.player.registerCommand(name, group, cb, suggestion)
+    if Bridge.Framework == 'ESX' then
+        -- ESX.RegisterCommand handles group gating natively.
+        -- Pass the group string directly (ESX accepts 'user'/'admin'/'owner' etc.).
+        -- When group is nil, use 'user' (unrestricted).
+        local esxGroup = group or 'user'
+        Bridge.FrameworkObject.RegisterCommand(name, esxGroup, function(xPlayer, args, showError)
+            cb(xPlayer.source, args, nil)
+        end, false, {
+            help      = suggestion and suggestion.help or '',
+            validate  = false,
+            arguments = suggestion and suggestion.params or {},
+        })
+    elseif Bridge.Framework == 'QBX' then
+        -- QBX: prefer lib.addCommand (ox_lib) which handles ACE and suggestions natively.
+        -- Fall back to plain RegisterCommand + ACE check if ox_lib is unavailable.
+        local restricted = group and ('group.' .. group) or false
+        local ok = pcall(function()
+            lib.addCommand(name, {
+                help       = suggestion and suggestion.help or '',
+                params     = suggestion and suggestion.params or {},
+                restricted = restricted,
+            }, function(source, args, raw)
+                cb(source, args, raw)
+            end)
+        end)
+        if not ok then
+            RegisterCommand(name, function(source, args, rawCommand)
+                if group and not IsPlayerAceAllowed(source, 'group.' .. group) then
+                    TriggerClientEvent('chat:addMessage', source, {
+                        args = { '^1You do not have permission to use this command.' }
+                    })
+                    return
+                end
+                cb(source, args, rawCommand)
+            end, false)
+            if suggestion then
+                TriggerClientEvent('chat:addSuggestion', -1, '/' .. name,
+                    suggestion.help or '', suggestion.params or {})
+            end
+        end
+    elseif Bridge.Framework == 'QBCore' then
+        -- QBCore: use RegisterCommand + IsPlayerAceAllowed for group gating.
+        -- QBCore permission levels map to ACE group nodes (group.admin, group.mod, group.god).
+        RegisterCommand(name, function(source, args, rawCommand)
+            if group and not IsPlayerAceAllowed(source, 'group.' .. group) then
+                TriggerClientEvent('chat:addMessage', source, {
+                    args = { '^1You do not have permission to use this command.' }
+                })
+                return
+            end
+            cb(source, args, rawCommand)
+        end, false)
+        if suggestion then
+            TriggerClientEvent('chat:addSuggestion', -1, '/' .. name,
+                suggestion.help or '', suggestion.params or {})
+        end
+    end
+end
+
+-- ================================================
+-- GANG MANAGEMENT
+-- ================================================
+
+---Get all online player source IDs
+---@return number[] sources
+function Bridge.player.getAllPlayers()
+    if Bridge.Framework == 'ESX' then
+        local players = Bridge.FrameworkObject.GetExtendedPlayers()
+        local sources = {}
+        for _, xPlayer in ipairs(players) do
+            sources[#sources + 1] = xPlayer.source
+        end
+        return sources
+    elseif Bridge.Framework == 'QBX' then
+        -- GetQBPlayers() returns a table keyed by source number (source → Player)
+        local players = exports.qbx_core:GetQBPlayers()
+        local sources = {}
+        for src in pairs(players) do
+            sources[#sources + 1] = src
+        end
+        return sources
+    elseif Bridge.Framework == 'QBCore' then
+        -- GetPlayers() returns a flat array of source IDs directly
+        return Bridge.FrameworkObject.Functions.GetPlayers() or {}
+    end
+    return {}
+end
+
+---Set player gang (QBCore/QBX only; ESX always returns false)
+---@param source number Player server ID
+---@param gangName string Gang name
+---@param grade number Gang grade/rank
+---@return boolean success
+function Bridge.player.setGang(source, gangName, grade)
+    if Bridge.Framework == 'QBX' then
+        -- exports.qbx_core:SetGang returns (ok, err); wrap in pcall for safety
+        -- in case an older QBX build doesn't expose this export.
+        local ok = false
+        local callOk, result = pcall(function()
+            return exports.qbx_core:SetGang(source, gangName, grade)
+        end)
+        if callOk then
+            -- SetGang returns true or (false, errMsg); treat nil as failure
+            ok = result == true
+        else
+            -- Export didn't exist — fall through to Player.Functions path
+            local player = exports.qbx_core:GetPlayer(source)
+            if player and player.Functions and player.Functions.SetGang then
+                ok = player.Functions.SetGang(gangName, grade) == true
+            end
+        end
+        return ok
+    elseif Bridge.Framework == 'QBCore' then
+        local player = Bridge.FrameworkObject.Functions.GetPlayer(source)
+        if not player then return false end
+        return player.Functions.SetGang(gangName, grade) == true
+    end
+    -- ESX has no gang concept
+    return false
+end
+
+-- ================================================
 -- EVENTS
 -- ================================================
+
+---Register a callback for when a player unloads/disconnects (server)
+---@param cb function(source) Called with the player's source
+function Bridge.player.onPlayerUnloaded(cb)
+    if Bridge.Framework == 'ESX' then
+        -- ESX fires esx:playerDropped when a player drops (passes source via closure)
+        AddEventHandler('esx:playerDropped', function(source, reason)
+            cb(source)
+        end)
+    elseif Bridge.Framework == 'QBX' then
+        -- QBX fires QBCore:Server:OnPlayerUnload on character logout
+        -- and qbx_core:server:playerLoggedOut on disconnect
+        AddEventHandler('QBCore:Server:OnPlayerUnload', function(src)
+            cb(src)
+        end)
+        AddEventHandler('qbx_core:server:playerLoggedOut', function(src)
+            cb(src)
+        end)
+    elseif Bridge.Framework == 'QBCore' then
+        AddEventHandler('QBCore:Server:OnPlayerUnload', function(src)
+            cb(src)
+        end)
+    end
+end
 
 ---Register callback for when player data loads on server
 ---@param cb function Callback receiving (source, identifier)

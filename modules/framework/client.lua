@@ -173,6 +173,22 @@ end
 -- EVENT HANDLERS
 -- ================================================
 
+---Register a callback for when the local player unloads/logs out (client)
+---Callback receives no arguments
+---@param cb function
+function Bridge.player.onPlayerUnloaded(cb)
+    if Bridge.Framework == 'ESX' then
+        RegisterNetEvent('esx:onPlayerLogout', function()
+            cb()
+        end)
+    elseif Bridge.Framework == 'QBCore' or Bridge.Framework == 'QBX' then
+        -- QBX fires the same event name as QBCore
+        RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
+            cb()
+        end)
+    end
+end
+
 ---Register callback for when player data is loaded on client
 ---Callback receives no arguments — use Bridge.player.getJob() etc. to read data
 ---@param cb function

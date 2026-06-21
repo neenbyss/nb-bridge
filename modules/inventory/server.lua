@@ -412,3 +412,26 @@ function Bridge.inventory.isUsableItemRegistered(itemName)
     return registeredUsable[itemName] ~= nil
 end
 
+---Get item metadata from player inventory
+---Only ox_inventory exposes per-slot metadata via the bridge.
+---Returns nil when the inventory system does not support metadata or the item is not found.
+---@param source number Player server ID
+---@param itemName string Item name
+---@return table|nil metadata Item metadata table, or nil
+function Bridge.inventory.getItemMetadata(source, itemName)
+    local inv = ResolveInventorySystem()
+
+    if inv == 'ox_inventory' then
+        -- GetItem(source, itemName, metadataFilter, returnsAll)
+        -- metadataFilter = nil means no filter; returnsAll = false → returns first match object
+        local item = exports.ox_inventory:GetItem(source, itemName, nil, false)
+        if item and type(item) == 'table' then
+            return item.metadata
+        end
+        return nil
+    end
+
+    -- Other inventory systems don't expose per-slot item metadata via the bridge
+    return nil
+end
+
