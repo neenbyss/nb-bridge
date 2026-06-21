@@ -43,6 +43,21 @@ globals = {
     "AddTextComponentString",
     "DrawNotification",
     "source",
+    -- Entity / ped natives
+    "GetPlayerPed",
+    "PlayerPedId",
+    "PlayerId",
+    "GetEntityCoords",
+    "SetEntityCoords",
+    "GetEntityHeading",
+    "SetEntityHeading",
+    "DoesEntityExist",
+    -- Animation natives
+    "HasAnimDictLoaded",
+    "RequestAnimDict",
+    "TaskPlayAnim",
+    "ClearPedTasks",
+    "ClearPedTasksImmediately",
     -- nb-bridge globals
     "Bridge",
     "BridgeConfig",
