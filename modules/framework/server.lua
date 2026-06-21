@@ -1,11 +1,13 @@
 -- ================================================
 -- FRAMEWORK BRIDGE - SERVER
 -- Provides unified player management API for
--- ESX and QBCore frameworks.
--- Source: nb-garages/bridge/framework.lua (superset)
+-- ESX, QBCore, and QBX frameworks.
+-- All methods live under Bridge.player.*
 -- ================================================
 
 if not IsDuplicityVersion() then return end
+
+Bridge.player = Bridge.player or {}
 
 local RESOURCE_NAME = GetCurrentResourceName()
 
@@ -13,25 +15,30 @@ local RESOURCE_NAME = GetCurrentResourceName()
 -- PLAYER MANAGEMENT
 -- ================================================
 
----Get the xPlayer (ESX) or Player (QBCore) object for direct framework access
+---Get the xPlayer (ESX) or Player (QBCore/QBX) object for direct framework access
 ---@param source number Player server ID
 ---@return table|nil xPlayer or Player object
-function Bridge.GetPlayer(source)
+function Bridge.player.getPlayer(source)
     if Bridge.Framework == 'ESX' then
         return Bridge.FrameworkObject.GetPlayerFromId(source)
+    elseif Bridge.Framework == 'QBX' then
+        return exports.qbx_core:GetPlayer(source)
     elseif Bridge.Framework == 'QBCore' then
         return Bridge.FrameworkObject.Functions.GetPlayer(source)
     end
     return nil
 end
 
----Get player identifier (license for ESX, citizenid for QBCore)
+---Get player identifier (license for ESX, citizenid for QBCore/QBX)
 ---@param source number Player server ID
 ---@return string|nil identifier
-function Bridge.GetIdentifier(source)
+function Bridge.player.getIdentifier(source)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         return xPlayer and xPlayer.getIdentifier() or nil
+    elseif Bridge.Framework == 'QBX' then
+        local player = exports.qbx_core:GetPlayer(source)
+        return player and player.PlayerData.citizenid or nil
     elseif Bridge.Framework == 'QBCore' then
         local player = Bridge.FrameworkObject.Functions.GetPlayer(source)
         return player and player.PlayerData.citizenid or nil
@@ -39,10 +46,10 @@ function Bridge.GetIdentifier(source)
     return nil
 end
 
----Get player SSN (ESX only, returns nil for QBCore)
+---Get player SSN (ESX only, returns nil for QBCore/QBX)
 ---@param source number Player server ID
 ---@return string|nil SSN in format XXX-XX-XXXX or nil
-function Bridge.GetSSN(source)
+function Bridge.player.getSSN(source)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         return xPlayer and xPlayer.getSSN() or nil
@@ -53,10 +60,17 @@ end
 ---Get player name
 ---@param source number Player server ID
 ---@return string name
-function Bridge.GetPlayerName(source)
+function Bridge.player.getPlayerName(source)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         return xPlayer and xPlayer.getName() or GetPlayerName(source)
+    elseif Bridge.Framework == 'QBX' then
+        local player = exports.qbx_core:GetPlayer(source)
+        if player then
+            local ci = player.PlayerData.charinfo
+            return ci and (ci.firstname .. ' ' .. ci.lastname) or GetPlayerName(source)
+        end
+        return GetPlayerName(source)
     elseif Bridge.Framework == 'QBCore' then
         local player = Bridge.FrameworkObject.Functions.GetPlayer(source)
         if player then
@@ -74,15 +88,29 @@ end
 
 ---Get player permission group
 ---@param source number Player server ID
----@return string group
-function Bridge.GetGroup(source)
+---@return string group ('god'|'superadmin'|'admin'|'mod'|'user')
+function Bridge.player.getGroup(source)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         return xPlayer and xPlayer.getGroup() or 'user'
-    elseif Bridge.Framework == 'QBCore' then
-        return Bridge.FrameworkObject.Functions.HasPermission(source, 'admin') and 'admin'
-            or Bridge.FrameworkObject.Functions.HasPermission(source, 'god') and 'god'
-            or 'user'
+    elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
+        -- Use configurable GroupMap so servers can customise their ACE ace names.
+        -- BridgeConfig.GroupMap = { god = 'group.god', superadmin = 'group.superadmin', ... }
+        local groupMap = (BridgeConfig and BridgeConfig.GroupMap) or {
+            god        = 'group.god',
+            superadmin = 'group.superadmin',
+            admin      = 'group.admin',
+            mod        = 'group.mod',
+        }
+        -- Check in priority order (highest privilege first)
+        local order = { 'god', 'superadmin', 'admin', 'mod' }
+        for _, groupName in ipairs(order) do
+            local ace = groupMap[groupName]
+            if ace and IsPlayerAceAllowed(source, ace) then
+                return groupName
+            end
+        end
+        return 'user'
     end
     return 'user'
 end
@@ -91,7 +119,7 @@ end
 ---@param source number Player server ID
 ---@param group string Group name (e.g. 'admin')
 ---@return boolean success
-function Bridge.SetGroup(source, group)
+function Bridge.player.setGroup(source, group)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if xPlayer then
@@ -104,22 +132,16 @@ end
 
 ---Check if player is admin based on AdminGroups config
 ---Uses the consumer's Config.AdminGroups first, falls back to BridgeConfig.AdminGroups
+---getGroup() already resolves ACE permissions for QBCore/QBX, so a single group
+---comparison is sufficient across all frameworks.
 ---@param source number Player server ID
 ---@return boolean
-function Bridge.IsAdmin(source)
-    local adminGroups = (Config and Config.AdminGroups) or BridgeConfig.AdminGroups or {}
-    local group = Bridge.GetGroup(source)
+function Bridge.player.isAdmin(source)
+    local adminGroups = (Config and Config.AdminGroups) or BridgeConfig.AdminGroups or { 'god', 'superadmin', 'admin' }
+    local group = Bridge.player.getGroup(source)
     for _, adminGroup in ipairs(adminGroups) do
         if group == adminGroup then
             return true
-        end
-    end
-    -- QBCore: also check via ace permissions
-    if Bridge.Framework == 'QBCore' then
-        for _, adminGroup in ipairs(adminGroups) do
-            if Bridge.FrameworkObject.Functions.HasPermission(source, adminGroup) then
-                return true
-            end
         end
     end
     return false
@@ -135,9 +157,11 @@ end
 ---@param amount number Amount to add
 ---@param reason string|nil Reason for the transaction
 ---@return boolean success
-function Bridge.AddMoney(source, moneyType, amount, reason)
-    if amount <= 0 then return false end
-    if Bridge.Framework == 'ESX' then
+function Bridge.player.addMoney(source, moneyType, amount, reason)
+    if not amount or amount <= 0 then return false end
+    if Bridge.Framework == 'QBX' then
+        return exports.qbx_core:AddMoney(source, moneyType, amount, reason or RESOURCE_NAME) == true
+    elseif Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if not xPlayer then return false end
         local account = (moneyType == 'cash') and 'money' or 'bank'
@@ -157,12 +181,19 @@ end
 ---@param amount number Amount to remove
 ---@param reason string|nil Reason for the transaction
 ---@return boolean success
-function Bridge.RemoveMoney(source, moneyType, amount, reason)
-    if amount <= 0 then return false end
-    if Bridge.Framework == 'ESX' then
+function Bridge.player.removeMoney(source, moneyType, amount, reason)
+    if not amount or amount <= 0 then return false end
+    if Bridge.Framework == 'QBX' then
+        return exports.qbx_core:RemoveMoney(source, moneyType, amount, reason or RESOURCE_NAME) == true
+    elseif Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if not xPlayer then return false end
-        local account = (moneyType == 'cash') and 'money' or 'bank'
+        local account = (moneyType == 'cash') and 'money' or moneyType
+        -- ESX removeAccountMoney has no return value; pre-check balance to detect
+        -- insufficient funds before deducting (prevents silent overdraft).
+        local acc = xPlayer.getAccount(account)
+        local current = acc and acc.money or 0
+        if current < amount then return false end
         xPlayer.removeAccountMoney(account, amount, reason or RESOURCE_NAME)
         return true
     elseif Bridge.Framework == 'QBCore' then
@@ -179,8 +210,10 @@ end
 ---@param amount number Amount to set
 ---@param reason string|nil Reason for the transaction
 ---@return boolean success
-function Bridge.SetMoney(source, moneyType, amount, reason)
-    if Bridge.Framework == 'ESX' then
+function Bridge.player.setMoney(source, moneyType, amount, reason)
+    if Bridge.Framework == 'QBX' then
+        return exports.qbx_core:SetMoney(source, moneyType, amount, reason or RESOURCE_NAME) == true
+    elseif Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if not xPlayer then return false end
         local account = (moneyType == 'cash') and 'money' or 'bank'
@@ -198,8 +231,10 @@ end
 ---@param source number Player server ID
 ---@param moneyType string 'cash' or 'bank'
 ---@return number amount
-function Bridge.GetMoney(source, moneyType)
-    if Bridge.Framework == 'ESX' then
+function Bridge.player.getMoney(source, moneyType)
+    if Bridge.Framework == 'QBX' then
+        return exports.qbx_core:GetMoney(source, moneyType) or 0
+    elseif Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if not xPlayer then return 0 end
         local account = (moneyType == 'cash') and 'money' or 'bank'
@@ -216,8 +251,12 @@ end
 ---Get all player money accounts in normalized format
 ---@param source number Player server ID
 ---@return table accounts {cash = number, bank = number, ...}
-function Bridge.GetAccounts(source)
-    if Bridge.Framework == 'ESX' then
+function Bridge.player.getAccounts(source)
+    if Bridge.Framework == 'QBX' then
+        local player = exports.qbx_core:GetPlayer(source)
+        if not player then return {} end
+        return player.PlayerData.money or {}
+    elseif Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if not xPlayer then return {} end
         local accounts = xPlayer.getAccounts()
@@ -243,7 +282,7 @@ end
 ---Get player job in canonical format
 ---@param source number Player server ID
 ---@return table|nil job {name, label, grade, grade_name, grade_label, grade_salary, onDuty}
-function Bridge.GetJob(source)
+function Bridge.player.getJob(source)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if not xPlayer then return nil end
@@ -257,6 +296,20 @@ function Bridge.GetJob(source)
             grade_label  = job.grade_label or job.grade_name or '',
             grade_salary = job.grade_salary or 0,
             onDuty       = job.onDuty ~= false,
+        }
+    elseif Bridge.Framework == 'QBX' then
+        local player = exports.qbx_core:GetPlayer(source)
+        if not player then return nil end
+        local job = player.PlayerData.job
+        if not job then return nil end
+        return {
+            name         = job.name,
+            label        = job.label,
+            grade        = job.grade and job.grade.level or 0,
+            grade_name   = job.grade and job.grade.name or '',
+            grade_label  = job.grade and job.grade.name or '',
+            grade_salary = job.payment or 0,
+            onDuty       = job.onduty or false,
         }
     elseif Bridge.Framework == 'QBCore' then
         local player = Bridge.FrameworkObject.Functions.GetPlayer(source)
@@ -282,8 +335,11 @@ end
 ---@param grade number Job grade
 ---@param onDuty boolean? On duty flag
 ---@return boolean success
-function Bridge.SetJob(source, job, grade, onDuty)
-    if Bridge.Framework == 'ESX' then
+function Bridge.player.setJob(source, job, grade, onDuty)
+    if Bridge.Framework == 'QBX' then
+        local ok = exports.qbx_core:SetJob(source, job, grade)
+        return ok == true
+    elseif Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if xPlayer then
             xPlayer.setJob(job, grade, onDuty)
@@ -298,11 +354,23 @@ function Bridge.SetJob(source, job, grade, onDuty)
     return false
 end
 
----Get player gang in canonical format (QBCore only, returns nil for ESX)
+---Get player gang in canonical format (QBCore/QBX only, returns nil for ESX)
 ---@param source number Player server ID
 ---@return table|nil gang {name, label, grade, grade_name, grade_label}
-function Bridge.GetGang(source)
-    if Bridge.Framework == 'QBCore' then
+function Bridge.player.getGang(source)
+    if Bridge.Framework == 'QBX' then
+        local player = exports.qbx_core:GetPlayer(source)
+        if not player then return nil end
+        local gang = player.PlayerData.gang
+        if not gang then return nil end
+        return {
+            name        = gang.name,
+            label       = gang.label,
+            grade       = gang.grade and gang.grade.level or 0,
+            grade_name  = gang.grade and gang.grade.name or '',
+            grade_label = gang.grade and gang.grade.name or '',
+        }
+    elseif Bridge.Framework == 'QBCore' then
         local player = Bridge.FrameworkObject.Functions.GetPlayer(source)
         if not player then return nil end
         local gang = player.PlayerData.gang
@@ -327,7 +395,7 @@ end
 ---Get player playtime in seconds (ESX only)
 ---@param source number Player server ID
 ---@return number|nil playtime
-function Bridge.GetPlayTime(source)
+function Bridge.player.getPlayTime(source)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         return xPlayer and xPlayer.getPlayTime() or nil
@@ -339,14 +407,14 @@ end
 ---@param source number Player server ID
 ---@param coords vector3|vector4|table
 ---@return boolean success
-function Bridge.SetCoords(source, coords)
+function Bridge.player.setCoords(source, coords)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if xPlayer and xPlayer.setCoords then
             xPlayer.setCoords(coords)
             return true
         end
-    elseif Bridge.Framework == 'QBCore' then
+    elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
         local ped = GetPlayerPed(source)
         if ped and ped ~= 0 then
             SetEntityCoords(ped, coords.x, coords.y, coords.z, false, false, false, false)
@@ -359,13 +427,13 @@ end
 ---Get player coords
 ---@param source number Player server ID
 ---@return vector3|nil coords
-function Bridge.GetCoords(source)
+function Bridge.player.getCoords(source)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if xPlayer then
             return xPlayer.getCoords(true)
         end
-    elseif Bridge.Framework == 'QBCore' then
+    elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
         local ped = GetPlayerPed(source)
         if ped and ped ~= 0 then
             return GetEntityCoords(ped)
@@ -378,7 +446,7 @@ end
 ---@param source number Player server ID
 ---@param eventName string Event name
 ---@vararg any Arguments to pass
-function Bridge.TriggerClientEvent(source, eventName, ...)
+function Bridge.player.triggerClientEvent(source, eventName, ...)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if xPlayer and xPlayer.triggerEvent then
@@ -396,7 +464,7 @@ end
 ---@param key string Variable key
 ---@param value any? If provided, sets the value; otherwise gets it
 ---@return any|nil value when getting, or true when setting
-function Bridge.PlayerVar(source, key, value)
+function Bridge.player.playerVar(source, key, value)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if not xPlayer then return nil end
@@ -415,8 +483,15 @@ end
 ---@param value string|number|table Meta value
 ---@param subIndex string? Sub key for nested meta
 ---@return boolean success
-function Bridge.SetMeta(source, index, value, subIndex)
-    if Bridge.Framework == 'ESX' then
+function Bridge.player.setMeta(source, index, value, subIndex)
+    if Bridge.Framework == 'QBX' then
+        if subIndex then
+            exports.qbx_core:SetMetadata(source, index .. '.' .. subIndex, value)
+        else
+            exports.qbx_core:SetMetadata(source, index, value)
+        end
+        return true
+    elseif Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if xPlayer and xPlayer.setMeta then
             xPlayer.setMeta(index, value, subIndex)
@@ -442,8 +517,15 @@ end
 ---@param index string? Meta key (nil = all metadata)
 ---@param subIndex string? Sub key for nested meta
 ---@return any metadata value
-function Bridge.GetMeta(source, index, subIndex)
-    if Bridge.Framework == 'ESX' then
+function Bridge.player.getMeta(source, index, subIndex)
+    if Bridge.Framework == 'QBX' then
+        if index then
+            local key = subIndex and (index .. '.' .. subIndex) or index
+            return exports.qbx_core:GetMetadata(source, key)
+        end
+        local player = exports.qbx_core:GetPlayer(source)
+        return player and player.PlayerData.metadata or nil
+    elseif Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         return xPlayer and xPlayer.getMeta(index, subIndex) or nil
     elseif Bridge.Framework == 'QBCore' then
@@ -465,8 +547,15 @@ end
 ---@param index string Meta key
 ---@param subIndex string? Sub key for nested meta
 ---@return boolean success
-function Bridge.ClearMeta(source, index, subIndex)
-    if Bridge.Framework == 'ESX' then
+function Bridge.player.clearMeta(source, index, subIndex)
+    if Bridge.Framework == 'QBX' then
+        if subIndex then
+            exports.qbx_core:SetMetadata(source, index .. '.' .. subIndex, nil)
+        else
+            exports.qbx_core:SetMetadata(source, index, nil)
+        end
+        return true
+    elseif Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if xPlayer and xPlayer.clearMeta then
             xPlayer.clearMeta(index, subIndex)
@@ -491,7 +580,7 @@ end
 ---@param source number Player server ID
 ---@param command string Command to execute
 ---@return boolean success
-function Bridge.ExecuteCommand(source, command)
+function Bridge.player.executeCommand(source, command)
     if Bridge.Framework == 'ESX' then
         local xPlayer = Bridge.FrameworkObject.GetPlayerFromId(source)
         if xPlayer and xPlayer.executeCommand then
@@ -513,13 +602,17 @@ end
 ---@param description string|nil Invoice description
 ---@param jobName string|nil Job name for context
 ---@return boolean success
-function Bridge.CreateBill(src, targetId, amount, description, jobName)
+function Bridge.player.createBill(src, targetId, amount, description, jobName)
     if Bridge.Framework == 'ESX' then
+        if not jobName then
+            Debugger('Framework', 'createBill: jobName is nil — refusing to bill society_unknown')
+            return false
+        end
         if GetResourceState('esx_billing') == 'started' then
-            TriggerEvent('esx_billing:sendBill', targetId, 'society_' .. (jobName or 'unknown'), jobName or 'Job', amount, description or '')
+            TriggerEvent('esx_billing:sendBill', targetId, 'society_' .. jobName, jobName, amount, description or '')
             return true
         end
-    elseif Bridge.Framework == 'QBCore' then
+    elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
         if GetResourceState('qb-billing') == 'started' then
             local success = exports['qb-billing']:CreateBill(src, targetId, amount, description or '')
             return success ~= nil
@@ -542,43 +635,30 @@ end
 
 ---Register callback for when player data loads on server
 ---@param cb function Callback receiving (source, identifier)
-function Bridge.OnPlayerLoaded(cb)
+function Bridge.player.onPlayerLoaded(cb)
     if Bridge.Framework == 'ESX' then
-        RegisterNetEvent('esx:playerLoaded', function(playerId, xPlayer)
-            local identifier = xPlayer and (xPlayer.getIdentifier and xPlayer.getIdentifier() or xPlayer.identifier)
-            cb(playerId, identifier)
-        end)
-    elseif Bridge.Framework == 'QBCore' then
-        RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
-            local src = source
-            local player = Bridge.FrameworkObject.Functions.GetPlayer(src)
-            if player then
-                cb(src, player.PlayerData.citizenid)
+        AddEventHandler('esx:playerLoaded', function(playerId, xPlayer)
+            local src = playerId or source
+            -- Defensively resolve xPlayer — ESX versions differ in payload shape
+            local resolvedPlayer = xPlayer
+            if not resolvedPlayer then
+                resolvedPlayer = Bridge.FrameworkObject.GetPlayerFromId(src)
             end
+            local identifier = resolvedPlayer and (
+                (resolvedPlayer.getIdentifier and resolvedPlayer.getIdentifier())
+                or resolvedPlayer.identifier
+            ) or nil
+            cb(src, identifier)
+        end)
+    elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
+        -- QBX fires the same event name as QBCore
+        AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
+            local src = source
+            -- Player arg is the Player object in newer QBCore/QBX
+            local resolvedPlayer = Player or Bridge.player.getPlayer(src)
+            local citizenid = resolvedPlayer and resolvedPlayer.PlayerData and resolvedPlayer.PlayerData.citizenid or nil
+            cb(src, citizenid)
         end)
     end
 end
 
--- ================================================
--- EXPORTS (for third-party scripts)
--- ================================================
-
-if not _BRIDGE_LOADER then
-    exports('GetPlayer', function(...) return Bridge.GetPlayer(...) end)
-    exports('GetIdentifier', function(...) return Bridge.GetIdentifier(...) end)
-    exports('GetSSN', function(...) return Bridge.GetSSN(...) end)
-    exports('GetPlayerName', function(...) return Bridge.GetPlayerName(...) end)
-    exports('GetGroup', function(...) return Bridge.GetGroup(...) end)
-    exports('SetGroup', function(...) return Bridge.SetGroup(...) end)
-    exports('IsAdmin', function(...) return Bridge.IsAdmin(...) end)
-    exports('AddMoney', function(...) return Bridge.AddMoney(...) end)
-    exports('RemoveMoney', function(...) return Bridge.RemoveMoney(...) end)
-    exports('SetMoney', function(...) return Bridge.SetMoney(...) end)
-    exports('GetMoney', function(...) return Bridge.GetMoney(...) end)
-    exports('GetAccounts', function(...) return Bridge.GetAccounts(...) end)
-    exports('GetJob', function(...) return Bridge.GetJob(...) end)
-    exports('SetJob', function(...) return Bridge.SetJob(...) end)
-    exports('GetGang', function(...) return Bridge.GetGang(...) end)
-    exports('CreateBill', function(...) return Bridge.CreateBill(...) end)
-    exports('OnPlayerLoaded', function(...) return Bridge.OnPlayerLoaded(...) end)
-end

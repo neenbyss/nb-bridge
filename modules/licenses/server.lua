@@ -4,11 +4,14 @@
 -- weapon license data from your license system.
 --
 -- Supports: bcs_licensemanager, okokLicenses, esx_license,
---           QBCore metadata, ESX default
+--           QBCore/QBX metadata, ESX default
 -- Auto-detected at startup.
+-- All methods live under Bridge.license.*
 -- ================================================
 
 if not IsDuplicityVersion() then return end
+
+Bridge.license = Bridge.license or {}
 
 local licenseSystem = nil
 
@@ -20,7 +23,8 @@ CreateThread(function()
         licenseSystem = 'okokLicenses'
     elseif GetResourceState('esx_license') == 'started' then
         licenseSystem = 'esx_license'
-    elseif Bridge.Framework == 'QBCore' then
+    elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
+        -- QBX uses the same PlayerData.metadata.licences path as QBCore
         licenseSystem = 'qbcore'
     elseif Bridge.Framework == 'ESX' then
         licenseSystem = 'esx_default'
@@ -69,11 +73,11 @@ end
 ---Get the full identity of a player
 ---@param source number
 ---@return table|nil {firstname, lastname, dob, sex}
-function Bridge.GetIdentity(source)
-    Debugger('Licenses', 'GetIdentity | source:', source)
+function Bridge.license.getIdentity(source)
+    Debugger('Licenses', 'getIdentity | source:', source)
 
     if Bridge.Framework == 'ESX' then
-        local xPlayer = Bridge.GetPlayer(source)
+        local xPlayer = Bridge.player.getPlayer(source)
         if not xPlayer then return nil end
 
         local name = xPlayer.getName()
@@ -85,8 +89,8 @@ function Bridge.GetIdentity(source)
             dob       = nil,
             sex       = nil,
         }
-    elseif Bridge.Framework == 'QBCore' then
-        local player = Bridge.GetPlayer(source)
+    elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
+        local player = Bridge.player.getPlayer(source)
         if not player then return nil end
 
         local charinfo = player.PlayerData.charinfo
@@ -110,8 +114,8 @@ end
 ---Get driver license status for a player
 ---@param source number
 ---@return table {hasLicense: boolean, label: string}
-function Bridge.GetDriverLicense(source)
-    Debugger('Licenses', 'GetDriverLicense | source:', source, '| system:', licenseSystem)
+function Bridge.license.getDriverLicense(source)
+    Debugger('Licenses', 'getDriverLicense | source:', source, '| system:', licenseSystem)
 
     if licenseSystem == 'bcs_licensemanager' then
         local found = BCS_FindLicense(source, 'driver')
@@ -132,7 +136,7 @@ function Bridge.GetDriverLicense(source)
     end
 
     if licenseSystem == 'esx_license' or licenseSystem == 'esx_default' then
-        local xPlayer = Bridge.GetPlayer(source)
+        local xPlayer = Bridge.player.getPlayer(source)
         if xPlayer then
             local licenses = xPlayer.getLicenses and xPlayer.getLicenses() or nil
             if licenses then
@@ -147,7 +151,8 @@ function Bridge.GetDriverLicense(source)
     end
 
     if licenseSystem == 'qbcore' then
-        local player = Bridge.GetPlayer(source)
+        -- QBX and QBCore both store licences in PlayerData.metadata.licences
+        local player = Bridge.player.getPlayer(source)
         if player then
             local metadata = player.PlayerData.metadata
             if metadata and metadata.licences then
@@ -168,8 +173,8 @@ end
 ---Get weapon/firearms license status for a player
 ---@param source number
 ---@return table {hasLicense: boolean, label: string}
-function Bridge.GetWeaponLicense(source)
-    Debugger('Licenses', 'GetWeaponLicense | source:', source, '| system:', licenseSystem)
+function Bridge.license.getWeaponLicense(source)
+    Debugger('Licenses', 'getWeaponLicense | source:', source, '| system:', licenseSystem)
 
     if licenseSystem == 'bcs_licensemanager' then
         local found = BCS_FindLicense(source, 'weapon')
@@ -190,7 +195,7 @@ function Bridge.GetWeaponLicense(source)
     end
 
     if licenseSystem == 'esx_license' or licenseSystem == 'esx_default' then
-        local xPlayer = Bridge.GetPlayer(source)
+        local xPlayer = Bridge.player.getPlayer(source)
         if xPlayer then
             local licenses = xPlayer.getLicenses and xPlayer.getLicenses() or nil
             if licenses then
@@ -205,7 +210,8 @@ function Bridge.GetWeaponLicense(source)
     end
 
     if licenseSystem == 'qbcore' then
-        local player = Bridge.GetPlayer(source)
+        -- QBX and QBCore both store licences in PlayerData.metadata.licences
+        local player = Bridge.player.getPlayer(source)
         if player then
             local metadata = player.PlayerData.metadata
             if metadata and metadata.licences then
@@ -219,12 +225,3 @@ function Bridge.GetWeaponLicense(source)
     return { hasLicense = false, label = '' }
 end
 
--- ================================================
--- EXPORTS
--- ================================================
-
-if not _BRIDGE_LOADER then
-    exports('GetIdentity', function(...) return Bridge.GetIdentity(...) end)
-    exports('GetDriverLicense', function(...) return Bridge.GetDriverLicense(...) end)
-    exports('GetWeaponLicense', function(...) return Bridge.GetWeaponLicense(...) end)
-end

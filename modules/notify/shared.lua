@@ -1,10 +1,12 @@
 -- ================================================
 -- NOTIFICATION BRIDGE (Shared: client + server)
 -- Adapts notifications to different notification systems.
--- Supports: ox_lib, ESX default, QBCore default, GTA native
+-- Supports: ox_lib, QBX, ESX default, QBCore default, GTA native
+-- All methods live under Bridge.notify.*
 -- ================================================
 
 Bridge = Bridge or {}
+Bridge.notify = Bridge.notify or {}
 
 local isServer = IsDuplicityVersion()
 local RESOURCE_NAME = GetCurrentResourceName()
@@ -27,21 +29,21 @@ if isServer then
     ---@param source number Player server ID
     ---@param message string
     ---@param type string 'success'|'error'|'info'|'warning'
-    function Bridge.Notify(source, message, type)
+    function Bridge.notify.send(source, message, type)
         TriggerClientEvent(NOTIFY_EVENT, source, message, type)
     end
 
 else
 
-    -- Client-side notification handler
+    -- Client-side notification handler (routes to Bridge.notify.show)
     RegisterNetEvent(NOTIFY_EVENT, function(message, type)
-        Bridge.ShowNotification(message, type)
+        Bridge.notify.show(message, type)
     end)
 
     ---Show a notification on the client
     ---@param message string
     ---@param type string 'success'|'error'|'info'|'warning'
-    function Bridge.ShowNotification(message, type)
+    function Bridge.notify.show(message, type)
         type = type or 'info'
 
         if notifySystem == 'ox_lib' then
@@ -51,6 +53,9 @@ else
                 type = type,
                 duration = 5000,
             })
+        elseif Bridge.Framework == 'QBX' then
+            -- QBX native notification (safety-net when ox_lib is unavailable)
+            exports.qbx_core:Notify(message, type, 5000)
         elseif Bridge.Framework == 'ESX' then
             Bridge.FrameworkObject.ShowNotification(message)
         elseif Bridge.Framework == 'QBCore' then
@@ -64,14 +69,3 @@ else
 
 end
 
--- ================================================
--- EXPORTS
--- ================================================
-
-if not _BRIDGE_LOADER then
-    if isServer then
-        exports('Notify', function(...) return Bridge.Notify(...) end)
-    else
-        exports('ShowNotification', function(...) return Bridge.ShowNotification(...) end)
-    end
-end

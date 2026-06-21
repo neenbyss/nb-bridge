@@ -5,11 +5,12 @@
 --
 -- NOTE: Callback names should be namespaced by the
 -- consumer script to avoid collisions, e.g.:
---   Bridge.CreateCallback('nb-garages:getVehicles', ...)
---   Bridge.TriggerServerCallback('nb-garages:getVehicles', ...)
+--   Bridge.callback.register('nb-garages:getVehicles', ...)
+--   Bridge.callback.trigger('nb-garages:getVehicles', ...)
 -- ================================================
 
 Bridge = Bridge or {}
+Bridge.callback = Bridge.callback or {}
 
 local isServer = IsDuplicityVersion()
 local RESOURCE_NAME = GetCurrentResourceName()
@@ -23,7 +24,7 @@ if isServer then
     ---Register a server callback
     ---@param name string Unique callback name (namespace with your resource name)
     ---@param cb function(source, respond, ...) Handler that calls respond(...) with the result
-    function Bridge.CreateCallback(name, cb)
+    function Bridge.callback.register(name, cb)
         callbacks[name] = cb
     end
 
@@ -39,9 +40,6 @@ if isServer then
         end
     end)
 
-    if not _BRIDGE_LOADER then
-        exports('CreateCallback', function(...) return Bridge.CreateCallback(...) end)
-    end
 
 else
 
@@ -50,12 +48,24 @@ else
 
     ---Trigger a server callback from client
     ---@param name string Callback name (must match a registered server callback)
-    ---@param cb function(...) Called with the server's response
+    ---@param cb function(...) Called with the server's response (or nil on timeout)
     ---@vararg any Arguments to pass to the server callback
-    function Bridge.TriggerServerCallback(name, cb, ...)
+    function Bridge.callback.trigger(name, cb, ...)
         requestId = requestId + 1
-        pending[requestId] = cb
-        TriggerServerEvent(TRIGGER_EVENT, name, requestId, ...)
+        local reqId = requestId
+        pending[reqId] = cb
+
+        -- Auto-cleanup after 15 seconds if the server never responds.
+        -- Fires cb(nil) so the caller can handle the absence gracefully.
+        SetTimeout(15000, function()
+            if pending[reqId] then
+                Debugger('Callback', 'Timeout: no response for "' .. name .. '" (reqId ' .. reqId .. ')')
+                pending[reqId] = nil
+                cb(nil)
+            end
+        end)
+
+        TriggerServerEvent(TRIGGER_EVENT, name, reqId, ...)
     end
 
     RegisterNetEvent(RECEIVE_EVENT, function(reqId, ...)
@@ -66,8 +76,5 @@ else
         end
     end)
 
-    if not _BRIDGE_LOADER then
-        exports('TriggerServerCallback', function(...) return Bridge.TriggerServerCallback(...) end)
-    end
 
 end

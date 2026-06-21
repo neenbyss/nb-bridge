@@ -9,6 +9,20 @@ Bridge = Bridge or {}
 Bridge.Framework = nil
 Bridge.FrameworkObject = nil
 
+-- ================================================
+-- NAMESPACE TABLES (v2.0.0)
+-- Created here, before any module loads, so every
+-- module can safely assign into Bridge.X.*
+-- ================================================
+
+Bridge.player    = {}
+Bridge.inventory = {}
+Bridge.vehicle   = {}
+Bridge.notify    = {}
+Bridge.callback  = {}
+Bridge.license   = {}
+Bridge.progress  = {}
+
 local isServer = IsDuplicityVersion()
 local RESOURCE_NAME = GetCurrentResourceName()
 
@@ -43,11 +57,17 @@ end
 
 -- ================================================
 -- FRAMEWORK DETECTION
--- Auto-detects ESX or QBCore at startup.
+-- Detection order: QBX first (qbx_core also provides
+-- qb-core, so it must be checked before qb-core),
+-- then ESX, then QBCore.
 -- ================================================
 
 local function DetectFramework()
-    if GetResourceState('es_extended') == 'started' then
+    if GetResourceState('qbx_core') == 'started' then
+        Bridge.Framework = 'QBX'
+        Bridge.FrameworkObject = exports.qbx_core
+        print('[' .. RESOURCE_NAME .. '] Framework detected: QBX (qbx_core)')
+    elseif GetResourceState('es_extended') == 'started' then
         Bridge.Framework = 'ESX'
         Bridge.FrameworkObject = exports['es_extended']:getSharedObject()
         print('[' .. RESOURCE_NAME .. '] Framework detected: ESX')
@@ -56,8 +76,22 @@ local function DetectFramework()
         Bridge.FrameworkObject = exports['qb-core']:GetCoreObject()
         print('[' .. RESOURCE_NAME .. '] Framework detected: QBCore')
     else
-        print('[' .. RESOURCE_NAME .. '] ^1ERROR: No compatible framework detected (ESX or QBCore required)^0')
+        print('[' .. RESOURCE_NAME .. '] ^1ERROR: No compatible framework detected (ESX, QBCore, or QBX required)^0')
     end
 end
 
 DetectFramework()
+
+-- ================================================
+-- CONSUMER API (v2.0.0)
+-- Add to fxmanifest.lua: dependency 'nb-bridge'
+-- Usage:
+--   local bridge = exports['nb-bridge']:get()
+--   bridge.player.addMoney(source, 'bank', 500)
+--   bridge.notify.show('Done!', 'success')
+-- ================================================
+if not _BRIDGE_LOADER then
+    exports('get', function()
+        return Bridge
+    end)
+end

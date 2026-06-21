@@ -2,16 +2,18 @@
 -- VEHICLE BRIDGE (Shared: client + server)
 -- Reusable vehicle utilities: plate management,
 -- spawning, properties get/set, vehicle insertion.
+-- All methods live under Bridge.vehicle.*
 -- ================================================
 
 Bridge = Bridge or {}
+Bridge.vehicle = Bridge.vehicle or {}
 
 local isServer = IsDuplicityVersion()
 
 ---Normalize a GTA plate (trim trailing spaces)
 ---@param plate string|nil
 ---@return string
-function Bridge.NormalizePlate(plate)
+function Bridge.vehicle.normalizePlate(plate)
     if not plate then return '' end
     return plate:match('^(.-)%s*$') or plate
 end
@@ -20,7 +22,7 @@ if isServer then
 
     ---Generate a random 8-character plate
     ---@return string
-    function Bridge.GeneratePlate()
+    function Bridge.vehicle.generatePlate()
         local chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
         local plate = ''
         for _ = 1, 8 do
@@ -35,13 +37,13 @@ if isServer then
     ---@param model string Vehicle model name
     ---@param props table|nil Optional vehicle properties
     ---@return boolean success
-    function Bridge.GiveVehicle(source, model, props)
+    function Bridge.vehicle.giveVehicle(source, model, props)
         if not source or not model then return false end
 
-        local identifier = Bridge.GetIdentifier(source)
+        local identifier = Bridge.player.getIdentifier(source)
         if not identifier then return false end
 
-        local plate = Bridge.GeneratePlate()
+        local plate = Bridge.vehicle.generatePlate()
         local vehicleProps = props or {}
         vehicleProps.model = GetHashKey(model)
         vehicleProps.plate = plate
@@ -54,7 +56,8 @@ if isServer then
                 { identifier, plate, propsJson, 'car', 1, 'default' }
             )
             return true
-        elseif Bridge.Framework == 'QBCore' then
+        elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
+            -- QBX uses the same player_vehicles schema as QBCore (citizenid column)
             MySQL.insert.await(
                 'INSERT INTO player_vehicles (license, citizenid, vehicle, hash, mods, plate, garage, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 {
@@ -76,7 +79,7 @@ if isServer then
     ---Get the full name of a vehicle's owner from the plate
     ---@param plate string
     ---@return string|nil fullName
-    function Bridge.GetVehicleOwnerName(plate)
+    function Bridge.vehicle.getVehicleOwnerName(plate)
         if not plate or plate == '' then return nil end
 
         local owner = nil
@@ -86,7 +89,8 @@ if isServer then
                 'SELECT owner FROM owned_vehicles WHERE plate = ?',
                 { plate }
             )
-        elseif Bridge.Framework == 'QBCore' then
+        elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
+            -- QBX uses the same player_vehicles/citizenid schema as QBCore
             owner = MySQL.scalar.await(
                 'SELECT citizenid FROM player_vehicles WHERE plate = ?',
                 { plate }
@@ -103,7 +107,7 @@ if isServer then
             if result then
                 return result.firstname .. ' ' .. result.lastname
             end
-        elseif Bridge.Framework == 'QBCore' then
+        elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
             local result = MySQL.single.await(
                 'SELECT charinfo FROM players WHERE citizenid = ?',
                 { owner }
@@ -121,13 +125,6 @@ if isServer then
         return nil
     end
 
-    -- Server exports
-    if not _BRIDGE_LOADER then
-        exports('NormalizePlate', function(...) return Bridge.NormalizePlate(...) end)
-        exports('GeneratePlate', function(...) return Bridge.GeneratePlate(...) end)
-        exports('GiveVehicle', function(...) return Bridge.GiveVehicle(...) end)
-        exports('GetVehicleOwnerName', function(...) return Bridge.GetVehicleOwnerName(...) end)
-    end
 
 -- ================================================
 -- CLIENT-SIDE VEHICLE FUNCTIONS
@@ -137,7 +134,7 @@ else
     ---Resolve a model string/number to a valid hash
     ---@param model string|number Model name or hash
     ---@return number hash
-    function Bridge.ResolveModelHash(model)
+    function Bridge.vehicle.resolveModelHash(model)
         if type(model) == 'string' then
             local numModel = tonumber(model)
             if numModel then
@@ -150,34 +147,34 @@ else
     end
 
     ---Spawn a vehicle at coords with optional properties
+    ---Uses GetGameTimer() for wall-clock accurate timeout (not a frame counter).
     ---@param model string|number Model name or hash
     ---@param coords vector3 Spawn position
     ---@param heading number Heading/rotation
     ---@param props table|nil Vehicle properties to apply
     ---@param plate string|nil Plate text to set
     ---@param cb function|nil Callback receiving (vehicle) or (nil) on fail
-    function Bridge.SpawnVehicle(model, coords, heading, props, plate, cb)
-        model = Bridge.ResolveModelHash(model)
-        Debugger('Vehicle', 'SpawnVehicle | hash:', model, '| type:', type(model))
+    function Bridge.vehicle.spawnVehicle(model, coords, heading, props, plate, cb)
+        model = Bridge.vehicle.resolveModelHash(model)
+        Debugger('Vehicle', 'spawnVehicle | hash:', model, '| type:', type(model))
 
         RequestModel(model)
-        local timeout = 0
-        while not HasModelLoaded(model) and timeout < 5000 do
+        local deadline = GetGameTimer() + 5000
+        while not HasModelLoaded(model) and GetGameTimer() < deadline do
             Wait(10)
-            timeout = timeout + 10
         end
 
         if not HasModelLoaded(model) then
-            Debugger('Vehicle', 'SpawnVehicle | model failed to load:', model)
+            Debugger('Vehicle', 'spawnVehicle | model failed to load:', model)
             if cb then cb(nil) end
-            return
+            return false
         end
 
         local vehicle = CreateVehicle(model, coords.x, coords.y, coords.z, heading, true, false)
         SetModelAsNoLongerNeeded(model)
 
         if props and next(props) then
-            Bridge.SetVehicleProperties(vehicle, props)
+            Bridge.vehicle.setVehicleProperties(vehicle, props)
         end
 
         if plate then
@@ -187,15 +184,25 @@ else
         SetVehicleOnGroundProperly(vehicle)
         SetEntityAsMissionEntity(vehicle, true, true)
 
-        Debugger('Vehicle', 'SpawnVehicle | plate: [' .. (plate or 'nil') .. '] | spawned at:', coords)
+        Debugger('Vehicle', 'spawnVehicle | plate: [' .. (plate or 'nil') .. '] | spawned at:', coords)
         if cb then cb(vehicle) end
+        return vehicle
     end
 
     ---Get vehicle properties (wraps framework function)
     ---@param vehicle number Vehicle entity
     ---@return table properties
-    function Bridge.GetVehicleProperties(vehicle)
-        if Bridge.Framework == 'ESX' then
+    function Bridge.vehicle.getVehicleProperties(vehicle)
+        -- ox_lib provides lib.getVehicleProperties; use it when available (QBX always has it)
+        if GetResourceState('ox_lib') == 'started' and lib and lib.getVehicleProperties then
+            return lib.getVehicleProperties(vehicle)
+        elseif Bridge.Framework == 'QBX' then
+            -- QBX fallback: use QBCore compat bridge (qbx_core provides qb-core)
+            local QB = exports['qb-core']:GetCoreObject()
+            if QB and QB.Functions then
+                return QB.Functions.GetVehicleProperties(vehicle)
+            end
+        elseif Bridge.Framework == 'ESX' then
             return Bridge.FrameworkObject.Game.GetVehicleProperties(vehicle)
         elseif Bridge.Framework == 'QBCore' then
             return Bridge.FrameworkObject.Functions.GetVehicleProperties(vehicle)
@@ -206,8 +213,17 @@ else
     ---Set vehicle properties (wraps framework function)
     ---@param vehicle number Vehicle entity
     ---@param props table Properties to apply
-    function Bridge.SetVehicleProperties(vehicle, props)
-        if Bridge.Framework == 'ESX' then
+    function Bridge.vehicle.setVehicleProperties(vehicle, props)
+        -- ox_lib provides lib.setVehicleProperties; use it when available (QBX always has it)
+        if GetResourceState('ox_lib') == 'started' and lib and lib.setVehicleProperties then
+            lib.setVehicleProperties(vehicle, props)
+        elseif Bridge.Framework == 'QBX' then
+            -- QBX fallback: use QBCore compat bridge
+            local QB = exports['qb-core']:GetCoreObject()
+            if QB and QB.Functions then
+                QB.Functions.SetVehicleProperties(vehicle, props)
+            end
+        elseif Bridge.Framework == 'ESX' then
             Bridge.FrameworkObject.Game.SetVehicleProperties(vehicle, props)
         elseif Bridge.Framework == 'QBCore' then
             Bridge.FrameworkObject.Functions.SetVehicleProperties(vehicle, props)
@@ -217,7 +233,7 @@ else
     ---Get a vehicle's display label from its model
     ---@param model string|number Model name or hash
     ---@return string label
-    function Bridge.GetVehicleLabel(model)
+    function Bridge.vehicle.getVehicleLabel(model)
         if type(model) == 'string' then
             model = GetHashKey(model)
         end
@@ -229,14 +245,5 @@ else
         return label
     end
 
-    -- Client exports
-    if not _BRIDGE_LOADER then
-        exports('NormalizePlate', function(...) return Bridge.NormalizePlate(...) end)
-        exports('ResolveModelHash', function(...) return Bridge.ResolveModelHash(...) end)
-        exports('SpawnVehicle', function(...) return Bridge.SpawnVehicle(...) end)
-        exports('GetVehicleProperties', function(...) return Bridge.GetVehicleProperties(...) end)
-        exports('SetVehicleProperties', function(...) return Bridge.SetVehicleProperties(...) end)
-        exports('GetVehicleLabel', function(...) return Bridge.GetVehicleLabel(...) end)
-    end
 
 end

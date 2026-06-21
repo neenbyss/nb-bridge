@@ -2,9 +2,12 @@
 -- PROGRESS BRIDGE (Client-only)
 -- Progress bar abstraction.
 -- Supports: ox_lib, native GTA animation fallback
+-- All methods live under Bridge.progress.*
 -- ================================================
 
 if IsDuplicityVersion() then return end
+
+Bridge.progress = Bridge.progress or {}
 
 local useOxLib = false
 
@@ -18,7 +21,7 @@ end)
 ---@param label string Display text
 ---@param anim? table {dict: string, name: string} Animation to play
 ---@return boolean completed true if finished, false if cancelled
-function Bridge.Progress(duration, label, anim)
+function Bridge.progress.show(duration, label, anim)
     if useOxLib then
         local result = exports.ox_lib:progressBar({
             duration = duration,
@@ -57,10 +60,3 @@ function Bridge.Progress(duration, label, anim)
     return true
 end
 
--- ================================================
--- EXPORTS
--- ================================================
-
-if not _BRIDGE_LOADER then
-    exports('Progress', function(...) return Bridge.Progress(...) end)
-end
