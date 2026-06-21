@@ -157,6 +157,9 @@ end
 ---@param amount number Amount to add
 ---@param reason string|nil Reason for the transaction
 ---@return boolean success
+---@note ESX: returns true whenever xPlayer is non-nil. ESX Legacy's
+---addAccountMoney() has no return value so success cannot be detected
+---from the outside — this is a known ESX framework limitation.
 function Bridge.player.addMoney(source, moneyType, amount, reason)
     if not amount or amount <= 0 then return false end
     if Bridge.Framework == 'QBX' then
@@ -706,7 +709,7 @@ end
 ---@return number[] sources
 function Bridge.player.getAllPlayers()
     if Bridge.Framework == 'ESX' then
-        local players = Bridge.FrameworkObject.GetExtendedPlayers()
+        local players = Bridge.FrameworkObject.GetExtendedPlayers() or {}
         local sources = {}
         for _, xPlayer in ipairs(players) do
             sources[#sources + 1] = xPlayer.source
@@ -766,6 +769,9 @@ end
 
 ---Register a callback for when a player unloads/disconnects (server)
 ---@param cb function(source) Called with the player's source
+---@note QBX: two events are registered (character logout + raw disconnect).
+---On a clean character-select logout, both can fire for the same source.
+---The bridge debounces within a 1-second window so cb is called at most once.
 function Bridge.player.onPlayerUnloaded(cb)
     if Bridge.Framework == 'ESX' then
         -- ESX fires esx:playerDropped when a player drops (passes source via closure)
@@ -773,14 +779,18 @@ function Bridge.player.onPlayerUnloaded(cb)
             cb(source)
         end)
     elseif Bridge.Framework == 'QBX' then
-        -- QBX fires QBCore:Server:OnPlayerUnload on character logout
-        -- and qbx_core:server:playerLoggedOut on disconnect
-        AddEventHandler('QBCore:Server:OnPlayerUnload', function(src)
+        -- QBX fires QBCore:Server:OnPlayerUnload on character logout and
+        -- qbx_core:server:playerLoggedOut on raw disconnect. Both may fire
+        -- for the same source on a clean logout — debounce to prevent double-fire.
+        local debounce = {}
+        local function fire(src)
+            if debounce[src] then return end
+            debounce[src] = true
             cb(src)
-        end)
-        AddEventHandler('qbx_core:server:playerLoggedOut', function(src)
-            cb(src)
-        end)
+            SetTimeout(1000, function() debounce[src] = nil end)
+        end
+        AddEventHandler('QBCore:Server:OnPlayerUnload', fire)
+        AddEventHandler('qbx_core:server:playerLoggedOut', fire)
     elseif Bridge.Framework == 'QBCore' then
         AddEventHandler('QBCore:Server:OnPlayerUnload', function(src)
             cb(src)

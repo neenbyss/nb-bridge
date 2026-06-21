@@ -54,7 +54,9 @@ else
                 duration = 5000,
             })
         elseif Bridge.Framework == 'QBX' then
-            -- QBX native notification (safety-net when ox_lib is unavailable)
+            -- QBX requires ox_lib, so this branch is unreachable in standard
+            -- QBX deployments. Kept as an explicit safety-net for edge cases
+            -- where ox_lib is present but not yet started at call time.
             exports.qbx_core:Notify(message, type, 5000)
         elseif Bridge.Framework == 'ESX' then
             Bridge.FrameworkObject.ShowNotification(message)
