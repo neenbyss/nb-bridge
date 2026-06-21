@@ -2,14 +2,12 @@
 name: nb-bridge
 author: "@KamerrEzz x NeenbyssStudio"
 description: >-
-  Complete reference for nb-bridge v2.0.0 — Neenbyss Studios' framework
-  abstraction layer for FiveM (ESX / QBCore / QBX). Load this skill when
-  writing, modifying, or migrating any nb-* resource that touches framework
-  APIs: players, money, jobs, gangs, inventory, items, stashes, notifications,
-  server callbacks, vehicles, licenses, usable items, or progress bars.
-  Triggers on: nb-bridge, exports['nb-bridge'], Bridge.player, Bridge.inventory,
-  Bridge.vehicle, Bridge.notify, Bridge.callback, Bridge.license, Bridge.progress,
-  nb-* FiveM resources targeting the Neenbyss server.
+  Complete reference for nb-bridge v2.0.0 — Neenbyss Studios' FiveM framework
+  abstraction layer (ESX / QBCore / QBX). Load this skill when writing,
+  modifying, or migrating any nb-* resource that touches framework APIs:
+  players, money, jobs, gangs, inventory, items, stashes, notifications,
+  server callbacks, vehicles, licenses, progress bars, lifecycle events
+  (bridge.event.*), or runtime diagnostics (bridge.diagnostics()).
 triggers:
   - nb-bridge
   - exports['nb-bridge']
@@ -20,6 +18,9 @@ triggers:
   - bridge.callback
   - bridge.license
   - bridge.progress
+  - bridge.event
+  - bridge.diagnostics
+  - /nbdiag
   - nb-* (FiveM resources using Neenbyss bridge)
 ---
 
@@ -1179,6 +1180,95 @@ if completed then
 else
     bridge.notify.show('Cancelled', 'error')
 end
+```
+
+---
+
+## bridge.event.* — Lifecycle Hooks
+
+Convenience namespace for resource and player lifecycle events. Methods are
+available on both server and client, but the set of methods differs by side.
+
+### Server-side methods (server only)
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `onPlayerLoaded` | `fun(cb: fun(source: number))` | Fires when any player finishes loading. Delegates to `bridge.player.onPlayerLoaded`. |
+| `onPlayerUnloaded` | `fun(cb: fun(source: number))` | Fires when any player unloads/disconnects. Delegates to `bridge.player.onPlayerUnloaded` (QBX: debounced 1s). |
+| `onResourceStart` | `fun(cb: fun(resourceName: string))` | Fires when ANY resource starts. |
+| `onResourceStop` | `fun(cb: fun(resourceName: string))` | Fires when ANY resource stops. |
+| `onSelfStart` | `fun(cb: fun())` | Fires when the consumer resource itself starts. Captures `GetCurrentResourceName()` at call time. |
+| `onSelfStop` | `fun(cb: fun())` | Fires when the consumer resource itself stops. |
+
+### Client-side methods (client only)
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `onPlayerLoaded` | `fun(cb: fun())` | Fires when local player finishes loading character. |
+| `onPlayerUnloaded` | `fun(cb: fun())` | Fires when local player unloads character. |
+| `onPlayerSpawned` | `fun(cb: fun())` | Fires when player spawns in world. ESX: `playerSpawned`. QBCore/QBX: `QBCore:Client:OnPlayerLoaded`. |
+| `onResourceStart` | `fun(cb: fun(resourceName: string))` | Client-side: `onClientResourceStart`. |
+| `onResourceStop` | `fun(cb: fun(resourceName: string))` | Client-side: `onClientResourceStop`. |
+
+```lua
+-- server
+bridge.event.onPlayerLoaded(function(source)
+    print('Player loaded:', source)
+end)
+
+bridge.event.onSelfStop(function()
+    -- cleanup when this resource stops
+end)
+
+-- client
+bridge.event.onPlayerSpawned(function()
+    -- safe to access player data here
+end)
+```
+
+**Note:** `bridge.event.onPlayerLoaded` and `bridge.event.onPlayerUnloaded` are
+convenience wrappers around `bridge.player.onPlayerLoaded` /
+`bridge.player.onPlayerUnloaded` — they are equivalent. The `bridge.event.*`
+namespace is preferred for lifecycle code as it makes intent clearer.
+
+---
+
+## bridge.diagnostics()
+
+Server-only. Returns a snapshot of the bridge's runtime state.
+
+```lua
+---@return BridgeDiagnosticsResult
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `version` | `string` | nb-bridge version (e.g. `'2.0.0'`) |
+| `framework` | `'ESX'\|'QBCore'\|'QBX'\|nil` | Detected framework |
+| `inventorySystem` | `string\|nil` | Detected inventory system |
+| `side` | `'server'` | Always `'server'` — diagnostics is server-only |
+| `uptime` | `number` | `GetGameTimer()` in milliseconds |
+| `features` | `table<string, boolean>` | Presence of: `ox_lib`, `ox_inventory`, `oxmysql`, `qs_inventory`, `origen`, `qb_inventory` |
+| `missing` | `string[]` | List of missing required dependencies |
+
+### `/nbdiag` command
+
+Admin or console only. Prints the full diagnostics table to the server console
+and sends it to admin chat. No arguments.
+
+### `exports['nb-bridge']:diagnostics()`
+
+Callable directly from other resources — returns the same table without needing
+a `bridge` reference.
+
+```lua
+-- from any resource
+local diag = exports['nb-bridge']:diagnostics()
+print(diag.framework, diag.inventorySystem)
+
+-- or via bridge
+local bridge = exports['nb-bridge']:get()
+local diag = bridge.diagnostics()
 ```
 
 ---

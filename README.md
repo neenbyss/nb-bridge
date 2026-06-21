@@ -280,6 +280,35 @@ Auto-detects: `bcs_licensemanager` → `okokLicenses` → `esx_license` → `esx
 
 `anim`: `{ dict = string, name = string }`
 
+### bridge.event.* — Server
+
+| Method | Notes |
+|--------|-------|
+| `onPlayerLoaded(cb)` | `cb(source)` — delegates to `bridge.player.onPlayerLoaded` |
+| `onPlayerUnloaded(cb)` | `cb(source)` — delegates to `bridge.player.onPlayerUnloaded`; QBX debounced 1s |
+| `onResourceStart(cb)` | `cb(resourceName)` — any resource start (`onResourceStart`) |
+| `onResourceStop(cb)` | `cb(resourceName)` — any resource stop (`onResourceStop`) |
+| `onSelfStart(cb)` | `cb()` — fires when the consumer resource itself starts |
+| `onSelfStop(cb)` | `cb()` — fires when the consumer resource itself stops |
+
+### bridge.event.* — Client
+
+| Method | Notes |
+|--------|-------|
+| `onPlayerLoaded(cb)` | `cb()` — delegates to `bridge.player.onPlayerLoaded` |
+| `onPlayerUnloaded(cb)` | `cb()` — delegates to `bridge.player.onPlayerUnloaded` |
+| `onPlayerSpawned(cb)` | `cb()` — ESX: `playerSpawned`; QBCore/QBX: `QBCore:Client:OnPlayerLoaded` |
+| `onResourceStart(cb)` | `cb(resourceName)` — `onClientResourceStart` |
+| `onResourceStop(cb)` | `cb(resourceName)` — `onClientResourceStop` |
+
+### bridge.diagnostics() — Server only
+
+| Method | Returns | Notes |
+|--------|---------|-------|
+| `diagnostics()` | `table` | Runtime snapshot: version, framework, inventory system, uptime, features, missing deps |
+
+Also available as `exports['nb-bridge']:diagnostics()`. See [Debugging](#debugging) for the `/nbdiag` command.
+
 ---
 
 ## Configuration (BridgeConfig)
@@ -358,6 +387,36 @@ See [docs/migration-v1-to-v2.md](docs/migration-v1-to-v2.md) for the full equiva
 | `bridge.player.getGang` / `setGang` | QBCore and QBX only. Returns `nil`/`false` on ESX. |
 | `bridge.inventory.canCarry` | `qb-inventory` and framework defaults do not expose weight checks. Returns `true` by default for those systems. |
 | `Bridge.InventorySystem` | Set ~500 ms after boot. Do not read at file-load time; use it inside callbacks or after startup. |
+
+---
+
+## Debugging
+
+### /nbdiag command
+
+Run `/nbdiag` in the server console or in-game (admin only) to print a runtime snapshot of nb-bridge:
+
+```
+[nb-bridge] Diagnostics
+  Version:    2.0.0
+  Framework:  QBX
+  Inventory:  ox_inventory
+  Uptime:     142.3s
+  Features:
+    ✓ ox_lib
+    ✓ ox_inventory
+    ✓ oxmysql
+    ✗ qs_inventory
+    ...
+  No missing dependencies.
+```
+
+You can also call it from another resource:
+
+```lua
+local diag = exports['nb-bridge']:diagnostics()
+print(diag.framework, diag.inventorySystem, diag.uptime)
+```
 
 ---
 

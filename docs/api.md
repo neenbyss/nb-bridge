@@ -25,6 +25,8 @@ Call `get()` at the top of each script file that needs the bridge. The returned 
 - [bridge.callback.*](#bridgecallback)
 - [bridge.license.*](#bridgelicense)
 - [bridge.progress.*](#bridgeprogress)
+- [bridge.event.*](#bridgeevent)
+- [bridge.diagnostics()](#bridgediagnostics)
 - [Internal Events](#internal-events)
 
 ---
@@ -1581,6 +1583,178 @@ local done = bridge.progress.show(3000, 'Repairing engine...', {
 })
 if done then
     -- repair complete
+end
+```
+
+---
+
+## bridge.event.*
+
+Module: `modules/events/shared.lua` — shared file; server and client methods live here.
+
+Convenience lifecycle hooks that wrap the underlying framework events. Use these instead of `AddEventHandler` directly to keep your code framework-agnostic.
+
+`onPlayerLoaded` and `onPlayerUnloaded` are thin wrappers over `bridge.player.onPlayerLoaded` / `bridge.player.onPlayerUnloaded` — they share the same underlying implementation, including the QBX double-fire debounce.
+
+---
+
+### bridge.event.* (Server)
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `onPlayerLoaded` | `cb: fun(source: number)` | Fires when a player finishes loading their character. Delegates to `bridge.player.onPlayerLoaded`. |
+| `onPlayerUnloaded` | `cb: fun(source: number)` | Fires when a player disconnects or logs out. Delegates to `bridge.player.onPlayerUnloaded`. QBX debounces double-fire within 1 second. |
+| `onResourceStart` | `cb: fun(resourceName: string)` | Fires when any resource starts (`onResourceStart`). |
+| `onResourceStop` | `cb: fun(resourceName: string)` | Fires when any resource stops (`onResourceStop`). |
+| `onSelfStart` | `cb: fun()` | Fires when the consumer resource itself starts. Captures `GetCurrentResourceName()` at registration time. |
+| `onSelfStop` | `cb: fun()` | Fires when the consumer resource itself stops. |
+
+---
+
+### bridge.event.* (Client)
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `onPlayerLoaded` | `cb: fun()` | Fires when the local player finishes loading their character. Delegates to `bridge.player.onPlayerLoaded`. |
+| `onPlayerUnloaded` | `cb: fun()` | Fires when the local player logs out. Delegates to `bridge.player.onPlayerUnloaded`. |
+| `onPlayerSpawned` | `cb: fun()` | Fires when the player spawns in the world after character select. ESX: `playerSpawned`; QBCore/QBX: `QBCore:Client:OnPlayerLoaded`. |
+| `onResourceStart` | `cb: fun(resourceName: string)` | Fires when a resource starts on the client (`onClientResourceStart`). |
+| `onResourceStop` | `cb: fun(resourceName: string)` | Fires when a resource stops on the client (`onClientResourceStop`). |
+
+---
+
+### Example
+
+```lua
+local bridge = exports['nb-bridge']:get()
+
+-- Server: react to any player loading
+bridge.event.onPlayerLoaded(function(source)
+    print('Player ' .. source .. ' loaded')
+end)
+
+-- Server: detect when your own resource restarts
+bridge.event.onSelfStart(function()
+    print('nb-myresource restarted — re-registering stashes')
+    bridge.inventory.registerStash('myresource:mainStash', 'Main Stash')
+end)
+
+bridge.event.onSelfStop(function()
+    print('nb-myresource stopping — cleanup')
+end)
+
+-- Server: watch for another specific resource
+bridge.event.onResourceStart(function(name)
+    if name == 'ox_inventory' then
+        print('ox_inventory came online')
+    end
+end)
+
+-- Client: fire when the player spawns in the world
+bridge.event.onPlayerSpawned(function()
+    local job = bridge.player.getJob()
+    print('Spawned as: ' .. job.name)
+end)
+
+-- Client: track resource lifecycle from the client
+bridge.event.onResourceStop(function(name)
+    if name == 'nb-myresource' then
+        -- hide any open UI
+    end
+end)
+```
+
+---
+
+## bridge.diagnostics()
+
+Module: `modules/diagnostics/server.lua` — server only.
+
+Returns a runtime snapshot of nb-bridge state. Useful for debugging framework detection, dependency issues, and inventory system resolution.
+
+### Signature
+
+```lua
+bridge.diagnostics(): BridgeDiagnosticsResult
+```
+
+Also callable as `exports['nb-bridge']:diagnostics()` from any other resource.
+
+### Return value
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `version` | `string` | nb-bridge version, e.g. `'2.0.0'` |
+| `framework` | `'ESX'\|'QBCore'\|'QBX'\|'none'` | Detected framework |
+| `inventorySystem` | `string\|nil` | Active inventory system, or `'not yet resolved'` if called before the 500ms detection completes |
+| `side` | `string` | Always `'server'` |
+| `uptime` | `number` | `GetGameTimer()` value in milliseconds since server start |
+| `features` | `table<string, boolean>` | Presence of key optional resources |
+| `missing` | `string[]` | Required dependencies that are not running |
+
+`features` keys:
+
+| Key | Resource checked |
+|-----|-----------------|
+| `ox_lib` | `ox_lib` |
+| `ox_inventory` | `ox_inventory` |
+| `oxmysql` | `oxmysql` |
+| `qs_inventory` | `qs-inventory` |
+| `origen` | `origen_inventory` |
+| `qb_inventory` | `qb-inventory` |
+
+`missing` is populated when:
+- `oxmysql` is not running (required by all frameworks)
+- `ox_inventory` is not running on a QBX server (required by QBX)
+- `ox_lib` is not running on a QBX server (required by QBX)
+
+### /nbdiag command
+
+Registered automatically at nb-bridge startup. Prints formatted diagnostics to the server console and, if called by an in-game admin, also sends output to their chat.
+
+**Access:**
+- Server console: always allowed
+- In-game: requires the caller to pass `bridge.player.isAdmin(source)`
+
+```
+/nbdiag
+```
+
+```
+[nb-bridge] Diagnostics
+  Version:    2.0.0
+  Framework:  QBX
+  Inventory:  ox_inventory
+  Uptime:     142.3s
+  Features:
+    ✓ ox_lib
+    ✓ ox_inventory
+    ✓ oxmysql
+    ✗ qs_inventory
+    ✗ origen
+    ✗ qb_inventory
+  No missing dependencies.
+```
+
+### Example
+
+```lua
+-- From another resource (server-side only)
+local diag = exports['nb-bridge']:diagnostics()
+
+print('Framework:', diag.framework)
+print('Inventory:', diag.inventorySystem)
+print('Uptime (s):', diag.uptime / 1000)
+
+if #diag.missing > 0 then
+    for _, dep in ipairs(diag.missing) do
+        print('MISSING:', dep)
+    end
+end
+
+-- Conditional logic based on detected framework
+if diag.framework == 'QBX' and not diag.features.ox_inventory then
+    error('QBX requires ox_inventory but it is not running')
 end
 ```
 
