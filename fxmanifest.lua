@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'Neenbyss Studios'
 description 'NB Bridge - Centralized framework abstraction layer for all NB resources'
-version '2.0.0'
+version '2.1.0'
 
 file 'loader.lua'
 

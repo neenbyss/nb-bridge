@@ -10,6 +10,25 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [2.1.0] — 2026-06-21
+
+### Added
+- `bridge.event.*` — unified lifecycle hook namespace for all frameworks:
+  - **Server:** `onPlayerLoaded`, `onPlayerUnloaded`, `onResourceStart`, `onResourceStop`, `onSelfStart`, `onSelfStop`
+  - **Client:** `onPlayerLoaded`, `onPlayerUnloaded`, `onPlayerSpawned`, `onResourceStart`, `onResourceStop`
+- `bridge.diagnostics()` — server-side runtime snapshot (framework, inventory system, feature flags, missing deps, uptime)
+- `/nbdiag` command — admin + console; prints diagnostics to server console and admin chat
+- `exports['nb-bridge']:diagnostics()` — direct export for calling diagnostics from other resources
+- LuaLS/EmmyLua type stubs (`types/nb-bridge.lua` + `.luarc.json`) — full IDE autocompletion and type checking for all 8 namespaces
+- GitHub Actions CI — luacheck linting on every push/PR; fxmanifest version validation on tag pushes
+- PR template (`.github/PULL_REQUEST_TEMPLATE.md`)
+
+### Fixed
+- CI: added missing FiveM natives to luacheck globals (`PlayerId`, `GetPlayerPed`, `SetEntityCoords`, `GetEntityCoords`, `HasAnimDictLoaded`, `RequestAnimDict`, `TaskPlayAnim`, `PlayerPedId`, `ClearPedTasks`)
+- CI: pinned `actions/checkout@v4.2.2` to silence Node.js 20 deprecation warning
+
+---
+
 ## [2.0.0] — 2026-06-21
 
 ### BREAKING CHANGES
