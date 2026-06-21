@@ -1,4 +1,22 @@
 -- ================================================
+-- DEPRECATION NOTICE (nb-bridge v2.0.0)
+-- ================================================
+-- loader.lua is no longer the recommended way to
+-- consume nb-bridge. In v2.0.0, use the export API:
+--
+--   local bridge = exports['nb-bridge']:get()
+--   bridge.player.addMoney(source, 'bank', 500)
+--
+-- To migrate:
+--   1. Remove `shared_scripts { '@nb-bridge/loader.lua' }` from your fxmanifest
+--   2. Add `dependency 'nb-bridge'` to your fxmanifest
+--   3. At the top of each script: local bridge = exports['nb-bridge']:get()
+--   4. Replace Bridge.Fn(...) → bridge.namespace.camelCaseMethod(...)
+--
+-- loader.lua will be removed in a future major version.
+-- ================================================
+
+-- ================================================
 -- NB-BRIDGE LOADER
 -- Include in consumer fxmanifest.lua:
 --   shared_scripts { '@nb-bridge/loader.lua' }

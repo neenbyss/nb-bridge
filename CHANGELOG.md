@@ -10,6 +10,53 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [2.0.0] — 2026-06-21
+
+### BREAKING CHANGES
+- **Namespaced API**: all flat `Bridge.Fn` methods removed. New API:
+  - `Bridge.player.*` — player management, money, jobs, gangs, permissions
+  - `Bridge.inventory.*` — item management, stashes, usable items
+  - `Bridge.vehicle.*` — vehicle spawning, properties, plate management
+  - `Bridge.notify.*` — notifications (server + client)
+  - `Bridge.callback.*` — server callbacks
+  - `Bridge.license.*` — driver/weapon license management
+  - `Bridge.progress.*` — progress bars
+- **Consumer API changed**: scripts must now use
+  `local bridge = exports['nb-bridge']:get()` instead of
+  `shared_scripts { '@nb-bridge/loader.lua' }`.
+- **No backward-compatibility aliases**: v1.x method names are gone.
+- **All per-method exports removed**: no more `exports['nb-bridge']:player_getJob(...)`.
+- **Method names are now camelCase**: `addMoney`, `getJob`, `spawnVehicle`, etc.
+
+### Added
+- **QBX (qbx_core) support** — full compatibility as a third framework.
+  Detection order: QBX → ESX → QBCore (prevents false-positives via the
+  qb-core compatibility bridge that QBX exposes).
+- `Bridge.player.setGang(source, gangName, grade)` — set player gang (QBCore/QBX).
+- `Bridge.player.onPlayerUnloaded(cb)` — server + client event hook for all frameworks.
+- `Bridge.player.getAllPlayers()` — returns online source ID array.
+- `Bridge.player.registerCommand(name, group, cb, suggestion?)` — unified command
+  registration with ACE gating across ESX / QBCore / QBX.
+- `Bridge.inventory.getItemMetadata(source, itemName)` — per-item metadata (ox_inventory only).
+- `Bridge.player.getGroup` now returns `'superadmin'` and `'mod'` groups on QBCore/QBX
+  via ACE permission check. Configurable via `BridgeConfig.GroupMap`.
+
+### Fixed
+- `Bridge.player.removeMoney` (ESX): pre-checks player balance; now returns real `false`
+  when funds are insufficient instead of always returning `true`.
+- `Bridge.inventory.registerUsableItem`: on `origen_inventory`, registers ONLY through
+  origen — eliminates double-fire that occurred when both origen and framework were notified.
+- `Bridge.vehicle.spawnVehicle`: uses `GetGameTimer()` wall-clock deadline instead of
+  a frame counter, preventing premature timeout under server load.
+- `Bridge.inventory.*`: `ResolveInventorySystem()` synchronous fallback added — early
+  callers (before the 500 ms detection thread) no longer silently fail.
+- `Bridge.inventory.forceOpenPlayerInventory` (qs-inventory): uses server export when
+  available; falls back to the correct client event without the spurious `{}` first arg.
+- `Bridge.callback.trigger`: 15-second cleanup timeout — pending callbacks are now
+  released with `cb(nil)` if the server never responds, preventing memory leaks.
+
+---
+
 ## [1.2.2] — 2026-04-19
 
 ### Changed
@@ -103,6 +150,7 @@ First public release.
 
 ---
 
+[2.0.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v2.0.0
 [1.2.2]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.2
 [1.2.1]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.1
 [1.2.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.0
