@@ -12,7 +12,7 @@ jobs:
     name: Lua Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - name: Install luacheck
         run: |
@@ -22,12 +22,14 @@ jobs:
       - name: Run luacheck
         run: luacheck modules/ shared/ --config .luacheckrc
 
+  # This job only runs on tag pushes (git push origin vX.Y.Z).
+  # It is intentionally skipped on branch pushes.
   validate-manifest:
     name: Validate Version
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - name: Check fxmanifest version matches tag
         run: |
