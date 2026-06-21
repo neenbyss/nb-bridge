@@ -22,6 +22,7 @@ Bridge.notify    = {}
 Bridge.callback  = {}
 Bridge.license   = {}
 Bridge.progress  = {}
+Bridge.event     = {}
 
 local isServer = IsDuplicityVersion()
 local RESOURCE_NAME = GetCurrentResourceName()

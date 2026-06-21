@@ -14,6 +14,7 @@ shared_scripts {
     'modules/notify/shared.lua',
     'modules/vehicle/shared.lua',
     'modules/callbacks/shared.lua',
+    'modules/events/shared.lua',
 }
 
 client_scripts {
@@ -28,5 +29,6 @@ server_scripts {
     'modules/framework/server.lua',
     'modules/inventory/server.lua',
     'modules/licenses/server.lua',
+    'modules/diagnostics/server.lua',
     'overrides/server/*.lua',
 }
