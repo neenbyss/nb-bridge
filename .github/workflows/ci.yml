@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  luacheck:
+    name: Lua Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install luacheck
+        run: |
+          sudo apt-get install -y luarocks
+          sudo luarocks install luacheck
+
+      - name: Run luacheck
+        run: luacheck modules/ shared/ --config .luacheckrc
+
+  validate-manifest:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check fxmanifest version matches tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          MANIFEST_VERSION=$(grep "^version" fxmanifest.lua | sed "s/version '//;s/'//")
+          echo "Tag:      $TAG"
+          echo "Manifest: $MANIFEST_VERSION"
+          if [ "$TAG" != "$MANIFEST_VERSION" ]; then
+            echo "ERROR: Tag v$TAG does not match fxmanifest version '$MANIFEST_VERSION'"
+            exit 1
+          fi
+          echo "OK: fxmanifest version matches tag"
