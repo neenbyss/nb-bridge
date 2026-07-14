@@ -827,3 +827,43 @@ function Bridge.player.onPlayerLoaded(cb)
     end
 end
 
+---Register a callback fired whenever a player's money changes — from the bridge
+---OR from any third-party script that calls the framework's money functions
+---directly. Useful for ledger reconciliation / audit trails.
+---The callback receives the AUTHORITATIVE new balance (read after the change),
+---so it is safe even when the framework event only reports a delta.
+---@param cb fun(source: number, moneyType: string, amount: number, newBalance: number, changeSource: string)
+---@note changeSource is 'add' | 'remove' | 'set' (ESX) or the framework operation
+---string (QBCore/QBX 'OnMoneyChange'). Do NOT mutate money inside cb without a
+---guard — writing money from the listener re-triggers it (infinite loop).
+---ESX account-money event payload shapes vary between builds; the bridge resolves
+---the account name defensively and normalizes 'money' -> 'cash'.
+function Bridge.player.onMoneyChanged(cb)
+    local function emit(src, account, amount, operation)
+        if not src then return end
+        local name = account
+        if type(account) == 'table' then name = account.name end
+        local moneyType = (name == 'money') and 'cash' or name
+        local newBalance = Bridge.player.getMoney(src, moneyType)
+        cb(src, moneyType, amount or 0, newBalance, operation)
+    end
+
+    if Bridge.Framework == 'ESX' then
+        AddEventHandler('esx:addAccountMoney', function(src, account, money)
+            emit(src, account, money, 'add')
+        end)
+        AddEventHandler('esx:removeAccountMoney', function(src, account, money)
+            emit(src, account, money, 'remove')
+        end)
+        AddEventHandler('esx:setAccountMoney', function(src, account)
+            emit(src, account, nil, 'set')
+        end)
+    elseif Bridge.Framework == 'QBX' or Bridge.Framework == 'QBCore' then
+        AddEventHandler('QBCore:Server:OnMoneyChange', function(src, moneyType, amount, operation)
+            if not src then return end
+            local newBalance = Bridge.player.getMoney(src, moneyType)
+            cb(src, moneyType, amount or 0, newBalance, operation or 'unknown')
+        end)
+    end
+end
+

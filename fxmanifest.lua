@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'Neenbyss Studios'
 description 'NB Bridge - Centralized framework abstraction layer for all NB resources'
-version '2.1.0'
+version '2.2.0'
 
 file 'loader.lua'
 
@@ -21,6 +21,7 @@ client_scripts {
     'modules/framework/client.lua',
     'modules/inventory/client.lua',
     'modules/progress/client.lua',
+    'modules/ui/client.lua',
     'overrides/client/*.lua',
 }
 
@@ -30,5 +31,6 @@ server_scripts {
     'modules/inventory/server.lua',
     'modules/licenses/server.lua',
     'modules/diagnostics/server.lua',
+    'modules/log/server.lua',
     'overrides/server/*.lua',
 }

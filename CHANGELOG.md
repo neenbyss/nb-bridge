@@ -10,6 +10,32 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [2.2.0] — 2026-07-13
+
+### Added
+- `bridge.log.*` — server-side audit logging (`bridge.log.createLog(category, title, message, data?, mention?)`).
+  Dispatches to the server's existing pipeline: **qb-log** (QBCore/QBX) when present →
+  a **Discord webhook** configured in `BridgeConfig.Logs.Webhooks` (framework-agnostic, works on
+  ESX which has no native log resource) → `Debugger` fallback. This is a production audit
+  trail and is **not** gated behind `Debug`.
+- `bridge.player.onMoneyChanged(cb)` — server hook fired whenever a player's money changes,
+  from the bridge OR any third-party script calling the framework money functions directly
+  (native events: `esx:addAccountMoney`/`removeAccountMoney`/`setAccountMoney`,
+  `QBCore:Server:OnMoneyChange`). `cb(source, moneyType, amount, newBalance, changeSource)` —
+  `newBalance` is the authoritative post-change balance.
+- `bridge.ui.*` — client-side UI lifecycle hooks (`beforeOpening`, `afterClosing`,
+  `beforeAction`, `afterAction`) so menu resources never branch on the framework in their
+  open/close code. Blocks inventory via statebag + closes ox_inventory on open; releases on
+  close. Redefinable through the `overrides/` folder.
+- `BridgeConfig.Logs` — configuration for the logging sinks (`DefaultColor`, `QbLogColor`,
+  `Webhooks`). Ships with an empty webhook default — never commit a live URL.
+
+### Notes
+- All additions are backwards-compatible with 2.1.0 — no renames, no signature changes.
+- New luacheck globals: `PerformHttpRequest`, `LocalPlayer`.
+
+---
+
 ## [2.1.0] — 2026-06-21
 
 ### Added

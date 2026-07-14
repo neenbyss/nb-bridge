@@ -1,5 +1,5 @@
 --- @meta
--- nb-bridge v2.0.0 type definitions
+-- nb-bridge v2.2.0 type definitions
 -- Do NOT require() this file — it is a type stub only.
 -- LuaLS loads it automatically when .luarc.json includes "types/" in workspace.library.
 
@@ -166,6 +166,13 @@
 --- Register a server-side callback fired when a player disconnects or logs out.
 --- QBX: debounced 1 second — cb is called at most once per source per second.
 --- @field onPlayerUnloaded fun(cb: fun(source: number))
+
+--- (v2.2.0) Register a callback fired whenever a player's money changes, from the
+--- bridge OR any third-party script calling the framework money functions directly.
+--- Callback receives (source, moneyType, amount, newBalance, changeSource).
+--- newBalance is the authoritative balance read after the change. Do not mutate
+--- money inside cb without a guard — it re-triggers the listener.
+--- @field onMoneyChanged fun(cb: fun(source: number, moneyType: string, amount: number, newBalance: number, changeSource: string))
 
 -- ---- CLIENT-SIDE PLAYER METHODS (no source arg) ----
 -- These methods are also members of BridgePlayer.
@@ -365,6 +372,36 @@
 --- @class BridgeEvent
 
 
+--- (v2.2.0) Server-side audit logging. Dispatches to the server's existing
+--- logging pipeline: qb-log (QBCore/QBX) → Discord webhook (BridgeConfig.Logs.Webhooks,
+--- works on ESX too) → Debugger fallback. This is a production audit trail and is
+--- NOT gated behind Debug.
+--- @class BridgeLog
+
+--- Send an audit log entry. Returns true when a real sink (qb-log or webhook)
+--- handled it, false when it fell back to Debugger.
+--- @field createLog fun(category: string, title: string, message: string, data?: table, mention?: boolean): boolean
+
+
+--- (v2.2.0) Client-side UI lifecycle hooks so menu resources never branch on the
+--- framework in their open/close code. Redefinable via the overrides/ folder.
+--- @class BridgeUi
+
+--- Call before opening a full-screen NUI menu — blocks inventory (statebag) and
+--- closes ox_inventory if present. Returns true (override hook point).
+--- @field beforeOpening fun(uiType?: string): boolean
+
+--- Call after a menu closes (from BOTH the NUI close callback AND any forced
+--- server close) to release focus-side effects set by beforeOpening.
+--- @field afterClosing fun(uiType?: string): boolean
+
+--- Call before a gated menu action. Override to add checks; return false to veto.
+--- @field beforeAction fun(action: string): boolean
+
+--- Call after a menu action completes. Passthrough hook (returns ok).
+--- @field afterAction fun(action: string, ok: boolean): boolean
+
+
 -- ============================================================
 -- ROOT Bridge CLASS
 -- ============================================================
@@ -381,6 +418,8 @@
 --- @field license BridgeLicense Server-side license and identity checks
 --- @field progress BridgeProgress Client-side progress bar
 --- @field event BridgeEvent Event utilities
+--- @field log BridgeLog (v2.2.0) Server-side audit logging
+--- @field ui BridgeUi (v2.2.0) Client-side UI lifecycle hooks
 --- @field Framework 'ESX'|'QBCore'|'QBX'|nil Detected framework (safe after exports:get())
 --- @field FrameworkObject table|nil Raw framework shared object / exports ref
 --- @field InventorySystem 'ox_inventory'|'qb-inventory'|'qs-inventory'|'origen_inventory'|'default'|nil Detected inventory system (set ~500ms after boot; safe to read inside events/threads)

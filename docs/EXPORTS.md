@@ -1,4 +1,4 @@
-# nb-bridge Exports — v2.0.0
+# nb-bridge Exports — v2.2.0
 
 nb-bridge exposes a **single export**: `get()`.
 
@@ -56,6 +56,9 @@ The table has the following top-level namespaces:
 | `bridge.callback` | Server + Client | Server callbacks |
 | `bridge.license` | Server only | Identity and license checks |
 | `bridge.progress` | Client only | Progress bars |
+| `bridge.event` | Server + Client | Lifecycle hooks (v2.1.0) |
+| `bridge.log` | Server only | Audit logging (v2.2.0) |
+| `bridge.ui` | Client only | UI lifecycle hooks (v2.2.0) |
 
 Plus global properties on `Bridge` directly:
 
@@ -116,7 +119,7 @@ For complete signatures, parameters, and examples see [api.md](api.md).
 
 ### bridge.player.* — Server
 
-`getPlayer`, `getIdentifier`, `getSSN`, `getPlayerName`, `getGroup`, `setGroup`, `isAdmin`, `getMoney`, `addMoney`, `removeMoney`, `setMoney`, `getAccounts`, `getJob`, `setJob`, `getGang`, `setGang`, `getAllPlayers`, `getPlayTime`, `getCoords`, `setCoords`, `triggerClientEvent`, `playerVar`, `getMeta`, `setMeta`, `clearMeta`, `executeCommand`, `registerCommand`, `createBill`, `onPlayerLoaded`, `onPlayerUnloaded`
+`getPlayer`, `getIdentifier`, `getSSN`, `getPlayerName`, `getGroup`, `setGroup`, `isAdmin`, `getMoney`, `addMoney`, `removeMoney`, `setMoney`, `getAccounts`, `getJob`, `setJob`, `getGang`, `setGang`, `getAllPlayers`, `getPlayTime`, `getCoords`, `setCoords`, `triggerClientEvent`, `playerVar`, `getMeta`, `setMeta`, `clearMeta`, `executeCommand`, `registerCommand`, `createBill`, `onPlayerLoaded`, `onPlayerUnloaded`, `onMoneyChanged` *(v2.2.0)*
 
 ### bridge.player.* — Client
 
@@ -166,6 +169,14 @@ For complete signatures, parameters, and examples see [api.md](api.md).
 
 `show`
 
+### bridge.log.* — Server *(v2.2.0)*
+
+`createLog` — dispatches to qb-log (QBCore/QBX) → Discord webhook (`BridgeConfig.Logs.Webhooks`, works on ESX too) → `Debugger` fallback. Production audit trail, not gated by `Debug`.
+
+### bridge.ui.* — Client *(v2.2.0)*
+
+`beforeOpening`, `afterClosing`, `beforeAction`, `afterAction` — framework-agnostic UI lifecycle hooks (block/close inventory on open, release on close). Redefinable via `overrides/`.
+
 ---
 
-*Neenbyss Studios — nb-bridge v2.0.0*
+*Neenbyss Studios — nb-bridge v2.2.0*
