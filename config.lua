@@ -41,4 +41,20 @@ BridgeConfig = {
         ['qs-inventory']  = 'nui://qs-inventory/html/images/%s.png',
         origen_inventory  = 'nui://origen_inventory/ui/images/%s.png',
     },
+
+    -- Audit-logging sinks used by Bridge.log.createLog (v2.2.0).
+    -- Dispatch priority: qb-log (if running) -> a Discord webhook below -> Debugger.
+    -- SECURITY: NEVER commit a live webhook URL here. Leave it empty and set it
+    -- per server from the consumer's own Config.Logs, or read it from a convar.
+    -- Shipping a real webhook as a default is a credential leak.
+    Logs = {
+        DefaultColor = 3447003, -- Discord embed color (decimal); used for webhook embeds
+        QbLogColor   = 'default', -- color name passed to qb-log:server:CreateLog
+        Webhooks = {
+            default = '',        -- fallback webhook for all categories (empty = disabled)
+            -- Per-category overrides, e.g.:
+            -- banking = '',
+            -- admin   = '',
+        },
+    },
 }

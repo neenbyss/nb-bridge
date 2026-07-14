@@ -23,6 +23,8 @@ Bridge.callback  = {}
 Bridge.license   = {}
 Bridge.progress  = {}
 Bridge.event     = {}
+Bridge.log       = {} -- v2.2.0: audit logging (server methods)
+Bridge.ui        = {} -- v2.2.0: UI lifecycle hooks (client methods)
 
 local isServer = IsDuplicityVersion()
 local RESOURCE_NAME = GetCurrentResourceName()

@@ -42,6 +42,8 @@ globals = {
     "SetNotificationTextEntry",
     "AddTextComponentString",
     "DrawNotification",
+    "PerformHttpRequest",
+    "LocalPlayer",
     "source",
     -- Entity / ped natives
     "GetPlayerPed",
