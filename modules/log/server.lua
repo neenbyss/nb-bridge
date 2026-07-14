@@ -17,8 +17,29 @@ Bridge.log = Bridge.log or {}
 
 local RESOURCE_NAME = GetCurrentResourceName()
 
+-- Exported functions execute inside nb-bridge's OWN Lua environment, even when
+-- called from another resource — a bare `Config` global read here can NEVER see
+-- the calling resource's `Config` table (FX resources are globally isolated;
+-- exports are cross-VM calls, not shared_script includes). Per-resource config
+-- is therefore tracked explicitly, keyed by GetInvokingResource().
+local perResourceLogConfig = {}
+
+---Register this resource's own Logs config so bridge.log.createLog can find it.
+---Call this ONCE at resource start (e.g. top of your server main.lua):
+---  bridge.log.configure(Config.Logs)
+---Without calling this, createLog() falls back to nb-bridge's own BridgeConfig.Logs.
+---@param logsConfig table  -- same shape as BridgeConfig.Logs (DefaultColor, QbLogColor, Webhooks)
+function Bridge.log.configure(logsConfig)
+    local resourceName = GetInvokingResource() or GetCurrentResourceName()
+    perResourceLogConfig[resourceName] = logsConfig
+end
+
 local function getLogConfig()
-    return (Config and Config.Logs) or (BridgeConfig and BridgeConfig.Logs) or {}
+    local invoking = GetInvokingResource()
+    if invoking and perResourceLogConfig[invoking] then
+        return perResourceLogConfig[invoking]
+    end
+    return (BridgeConfig and BridgeConfig.Logs) or {}
 end
 
 ---Resolve the webhook URL for a category: per-category override → default → none.

@@ -382,6 +382,13 @@
 --- handled it, false when it fell back to Debugger.
 --- @field createLog fun(category: string, title: string, message: string, data?: table, mention?: boolean): boolean
 
+--- (v2.3.0) Register THIS resource's own Logs config (same shape as BridgeConfig.Logs)
+--- so createLog() can find it. MUST be called once at resource start — exported
+--- functions run inside nb-bridge's own environment and cannot read the caller's
+--- global Config table directly; this is the only way to opt into a per-resource
+--- webhook/color override instead of nb-bridge's own BridgeConfig.Logs default.
+--- @field configure fun(logsConfig: table)
+
 
 --- (v2.2.0) Client-side UI lifecycle hooks so menu resources never branch on the
 --- framework in their open/close code. Redefinable via the overrides/ folder.

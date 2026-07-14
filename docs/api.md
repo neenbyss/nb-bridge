@@ -1714,11 +1714,39 @@ end)
 
 ## bridge.log.* (Server)
 
-Module: `modules/log/server.lua` — server only. *(v2.2.0)*
+Module: `modules/log/server.lua` — server only. *(v2.2.0, `configure` added in v2.3.0)*
 
 Production audit trail. **Not gated behind `Config.Debug`/`BridgeConfig.Debug`** —
 unlike `Debugger()`, which is a development aid. Use `bridge.log` for records that
 must always be written (money changes, admin actions, item spawns, stash access).
+
+---
+
+### bridge.log.configure
+
+```lua
+bridge.log.configure(logsConfig)
+```
+
+Register **your own resource's** `Logs` config (same shape as `BridgeConfig.Logs`:
+`DefaultColor`, `QbLogColor`, `Webhooks`) so `createLog()` can actually find it.
+
+**Why this exists (read this if you set `Config.Logs.Webhooks` and it seemed to be
+ignored):** `bridge.log.createLog` is an exported function — it executes inside
+nb-bridge's own Lua environment even when called from another resource, because FX
+resources are globally isolated (nb-bridge does not use `use_experimental_fxv2_oal`).
+A bare `Config` read inside nb-bridge's code can never see YOUR resource's `Config`
+table. `configure()` works around this correctly using `GetInvokingResource()` to
+remember which resource registered which config:
+
+```lua
+-- top of your server/main.lua, ONCE:
+local bridge = exports['nb-bridge']:get()
+bridge.log.configure(Config.Logs)
+```
+
+Without calling this, `createLog()` silently falls back to nb-bridge's own
+`BridgeConfig.Logs` — not an error, just not what you configured.
 
 ---
 

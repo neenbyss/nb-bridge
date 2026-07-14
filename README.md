@@ -310,13 +310,19 @@ Auto-detects: `bcs_licensemanager` → `okokLicenses` → `esx_license` → `esx
 
 Also available as `exports['nb-bridge']:diagnostics()`. See [Debugging](#debugging) for the `/nbdiag` command.
 
-### bridge.log.* — Server *(v2.2.0)*
+### bridge.log.* — Server *(v2.2.0, `configure` added in v2.3.0)*
 
 | Method | Returns | Notes |
 |--------|---------|-------|
-| `createLog(category, title, message, data?, mention?)` | `boolean` | Audit trail. Dispatch: `qb-log` → Discord webhook (`BridgeConfig.Logs.Webhooks`, works on ESX) → `Debugger`. Not gated by `Debug`. |
+| `configure(logsConfig)` | — | **Call once at resource start.** Registers YOUR resource's own `Logs` config (same shape as `BridgeConfig.Logs`) so `createLog()` can find it — exported functions run inside nb-bridge's own environment, so a bare `Config` global can never see your resource's config without this. |
+| `createLog(category, title, message, data?, mention?)` | `boolean` | Audit trail. Dispatch: `qb-log` → Discord webhook (your registered `Logs.Webhooks`, or `BridgeConfig.Logs.Webhooks` if you never called `configure`) → `Debugger`. Not gated by `Debug`. |
 
-**SECURITY:** never commit a live webhook URL as `BridgeConfig.Logs.Webhooks.default` — leave it empty and set it per-server (or via convar).
+```lua
+-- top of your server/main.lua, once:
+bridge.log.configure(Config.Logs)
+```
+
+**SECURITY:** never commit a live webhook URL as a default — leave it empty and set it per-server (or via convar).
 
 ### bridge.ui.* — Client *(v2.2.0)*
 

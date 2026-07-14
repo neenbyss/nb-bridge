@@ -10,6 +10,35 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [2.3.0] — 2026-07-14
+
+### Fixed
+- **`bridge.log.createLog` never actually read a consumer's own `Config.Logs`.** Exported
+  functions execute inside nb-bridge's own Lua environment even when called via export from
+  another resource — FX resources are globally isolated (nb-bridge does not declare
+  `use_experimental_fxv2_oal`), so a bare `Config` global read inside `getLogConfig()` could
+  only ever see nb-bridge's own (nonexistent) `Config`, silently falling through to
+  `BridgeConfig.Logs` on every call regardless of what a consumer set in their own config.
+  This affected every resource that set a per-resource webhook via `Config.Logs.Webhooks`
+  expecting it to override the default — it never did.
+
+### Added
+- `bridge.log.configure(logsConfig)` — register a resource's own `Logs` config (same shape as
+  `BridgeConfig.Logs`) once at startup via `GetInvokingResource()`-keyed storage, so
+  `createLog()` can actually find it. Consumers must call this once (e.g. top of
+  `server/main.lua`: `bridge.log.configure(Config.Logs)`) to opt into a per-resource
+  webhook/color override instead of nb-bridge's own default.
+
+### Known limitation (not fixed in this release)
+- `bridge.player.isAdmin`'s `Config.AdminGroups` cascade has the exact same underlying bug
+  (bare `Config` read inside an exported function, dating to the original v2.0.0 release —
+  predates the logging cascade). It currently only ever resolves `BridgeConfig.AdminGroups`
+  for export-getter consumers. Left unfixed pending a broader per-resource config pattern
+  (tracked as a follow-up); consumers needing a different admin definition must currently
+  edit `BridgeConfig.AdminGroups` directly in nb-bridge's own `config.lua`.
+
+---
+
 ## [2.2.0] — 2026-07-13
 
 ### Added
