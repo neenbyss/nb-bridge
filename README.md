@@ -154,6 +154,7 @@ Full signatures and parameter tables are in [docs/api.md](docs/api.md). Below is
 | `createBill(src, targetId, amount, desc?, jobName?)` | `boolean` | Auto-detects billing system |
 | `onPlayerLoaded(cb)` | — | `cb(source, identifier)` |
 | `onPlayerUnloaded(cb)` | — | `cb(source)`; QBX debounces double-fire |
+| `onMoneyChanged(cb)` | — | *(v2.2.0)* `cb(source, moneyType, amount, newBalance, changeSource)`; fires on bridge or third-party money changes |
 
 ### bridge.player.* — Client
 
@@ -309,6 +310,25 @@ Auto-detects: `bcs_licensemanager` → `okokLicenses` → `esx_license` → `esx
 
 Also available as `exports['nb-bridge']:diagnostics()`. See [Debugging](#debugging) for the `/nbdiag` command.
 
+### bridge.log.* — Server *(v2.2.0)*
+
+| Method | Returns | Notes |
+|--------|---------|-------|
+| `createLog(category, title, message, data?, mention?)` | `boolean` | Audit trail. Dispatch: `qb-log` → Discord webhook (`BridgeConfig.Logs.Webhooks`, works on ESX) → `Debugger`. Not gated by `Debug`. |
+
+**SECURITY:** never commit a live webhook URL as `BridgeConfig.Logs.Webhooks.default` — leave it empty and set it per-server (or via convar).
+
+### bridge.ui.* — Client *(v2.2.0)*
+
+| Method | Returns | Notes |
+|--------|---------|-------|
+| `beforeOpening(uiType?)` | `boolean` | Before opening a NUI menu: blocks inventory (statebag), closes ox_inventory |
+| `afterClosing(uiType?)` | `boolean` | After close (call from NUI close AND forced/server close) — releases the above |
+| `beforeAction(action)` | `boolean` | Gate a menu action; override to veto (`false`) |
+| `afterAction(action, ok)` | `boolean` | Passthrough hook after an action |
+
+Framework-agnostic UI lifecycle hooks; redefinable via the `overrides/` folder.
+
 ---
 
 ## Configuration (BridgeConfig)
@@ -323,6 +343,7 @@ Defined in `config.lua`. Consumer scripts can override via their own `Config` ta
 | `BridgeConfig.Stash.MaxWeight` | `number` | `100000` | Default stash max weight |
 | `BridgeConfig.InventoryImagePaths` | `table` | See config.lua | NUI image paths per inventory system |
 | `BridgeConfig.GroupMap` | `table\|nil` | See server.lua | ACE → group name mapping for QBCore/QBX |
+| `BridgeConfig.Logs` | `table` | See config.lua | *(v2.2.0)* Audit-log sinks for `bridge.log`: `DefaultColor`, `QbLogColor`, `Webhooks` (empty by default — never ship a live URL) |
 
 Config priority:
 
@@ -398,7 +419,7 @@ Run `/nbdiag` in the server console or in-game (admin only) to print a runtime s
 
 ```
 [nb-bridge] Diagnostics
-  Version:    2.0.0
+  Version:    2.2.0
   Framework:  QBX
   Inventory:  ox_inventory
   Uptime:     142.3s
@@ -439,4 +460,4 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-*Neenbyss Studios — nb-bridge v2.0.0*
+*Neenbyss Studios — nb-bridge v2.2.0*

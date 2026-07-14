@@ -1,6 +1,6 @@
 # nb-bridge Documentation
 
-**Version:** 2.0.0
+**Version:** 2.2.0
 **Frameworks:** ESX Legacy, QBCore, QBX (qbx_core)
 **Lua:** 5.4
 
@@ -67,7 +67,12 @@ bridge.progress.show(3000, 'Working...', { dict = 'mini@repair', name = 'fixing_
 | `bridge.callback.*` | Server + Client | Server callback system |
 | `bridge.license.*` | Server only | Identity, driver license, weapon license |
 | `bridge.progress.*` | Client only | Progress bars (auto-detects ox_lib) |
+| `bridge.event.*` | Server + Client | Lifecycle hooks (player/resource) — v2.1.0 |
+| `bridge.log.*` | Server only | Audit logging (qb-log / webhook / Debugger) — v2.2.0 |
+| `bridge.ui.*` | Client only | UI lifecycle hooks (open/close/action) — v2.2.0 |
+
+Plus `bridge.diagnostics()` (server) — runtime snapshot; see [api.md](api.md).
 
 ---
 
-*Neenbyss Studios — nb-bridge v2.0.0*
+*Neenbyss Studios — nb-bridge v2.2.0*

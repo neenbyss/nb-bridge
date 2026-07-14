@@ -1,4 +1,4 @@
-# nb-bridge API Reference — v2.0.0
+# nb-bridge API Reference — v2.2.0
 
 All methods are accessed through the bridge table returned by the single export:
 
@@ -26,6 +26,8 @@ Call `get()` at the top of each script file that needs the bridge. The returned 
 - [bridge.license.*](#bridgelicense)
 - [bridge.progress.*](#bridgeprogress)
 - [bridge.event.*](#bridgeevent)
+- [bridge.log.* (Server)](#bridgelog-server)
+- [bridge.ui.* (Client)](#bridgeui-client)
 - [bridge.diagnostics()](#bridgediagnostics)
 - [Internal Events](#internal-events)
 
@@ -610,6 +612,50 @@ bridge.player.onPlayerUnloaded(cb)
 | `cb` | `function(source)` | Called when player unloads |
 
 **QBX note:** Two framework events (`QBCore:Server:OnPlayerUnload` + `qbx_core:server:playerLoggedOut`) can fire for the same player on a clean logout. The bridge debounces within a 1-second window so `cb` fires at most once per player.
+
+---
+
+### bridge.player.onMoneyChanged (Server) *(v2.2.0)*
+
+Register a callback fired whenever a player's money changes — whether the change
+came through `bridge.player.*` or a third-party script called the framework's
+money functions directly. Useful for ledger reconciliation and audit trails.
+
+```lua
+bridge.player.onMoneyChanged(cb)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `cb` | `function(source, moneyType, amount, newBalance, changeSource)` | See below |
+
+Callback arguments:
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `source` | `number` | Player server ID |
+| `moneyType` | `string` | Normalized account (`'cash'`/`'bank'`; ESX `'money'` → `'cash'`) |
+| `amount` | `number` | Delta reported by the framework event (`0` when unknown) |
+| `newBalance` | `number` | Authoritative balance read *after* the change |
+| `changeSource` | `string` | `'add'`/`'remove'`/`'set'` (ESX) or the framework operation (QBCore/QBX) |
+
+| Framework | Events listened |
+|-----------|-----------------|
+| ESX | `esx:addAccountMoney`, `esx:removeAccountMoney`, `esx:setAccountMoney` |
+| QBCore / QBX | `QBCore:Server:OnMoneyChange` |
+
+**Notes:**
+- `newBalance` is read via `bridge.player.getMoney` after the event, so it is correct even when the framework event only reports a delta.
+- ESX account-money event payload shapes vary between builds; the bridge resolves the account name defensively (string or `{ name = ... }` table).
+- **Do not** mutate money inside `cb` without a guard — writing money from the listener re-triggers it (infinite loop).
+
+```lua
+bridge.player.onMoneyChanged(function(source, moneyType, amount, newBalance, changeSource)
+    bridge.log.createLog('money', 'Balance change',
+        ('%s: %s %s -> %s'):format(changeSource, moneyType, amount, newBalance),
+        { source = source, newBalance = newBalance })
+end)
+```
 
 ---
 
@@ -1666,6 +1712,92 @@ end)
 
 ---
 
+## bridge.log.* (Server)
+
+Module: `modules/log/server.lua` — server only. *(v2.2.0)*
+
+Production audit trail. **Not gated behind `Config.Debug`/`BridgeConfig.Debug`** —
+unlike `Debugger()`, which is a development aid. Use `bridge.log` for records that
+must always be written (money changes, admin actions, item spawns, stash access).
+
+---
+
+### bridge.log.createLog
+
+Write an audit log entry. The call site never branches on `Bridge.Framework`.
+
+```lua
+bridge.log.createLog(category, title, message, data, mention)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `category` | `string` | Log category / channel key (e.g. `'banking'`, `'admin'`) |
+| `title` | `string` | Short log title |
+| `message` | `string` | Human-readable body |
+| `data` | `table\|nil` | Structured fields — rendered as Discord embed fields on the webhook sink |
+| `mention` | `boolean\|nil` | Ping (qb-log `@everyone` / webhook `@here`). Defaults to `false`. |
+
+**Returns:** `boolean` — `true` when a real sink handled it, `false` on the Debugger fallback.
+
+Dispatch priority:
+
+| Priority | Sink | How |
+|----------|------|-----|
+| 1 | `qb-log` | `TriggerEvent('qb-log:server:CreateLog', category, title, color, message, mention)` when the `qb-log` resource is running |
+| 2 | Discord webhook | `BridgeConfig.Logs.Webhooks[category]` or `.default` — framework-agnostic (works on ESX, which has no native log resource); `data` becomes embed fields |
+| 3 | `Debugger` | Fallback when no sink is configured (debug-gated console print) |
+
+**SECURITY:** never commit a live webhook URL as `BridgeConfig.Logs.Webhooks.default`.
+Leave it empty and set it per-server from the consumer's `Config.Logs`, or read it
+from a convar. Shipping a real webhook is a credential leak.
+
+```lua
+bridge.log.createLog('money', 'Bank Withdrawal',
+    ('%s withdrew $%s'):format(bridge.player.getPlayerName(source), amount),
+    {
+        source     = source,
+        identifier = bridge.player.getIdentifier(source),
+        amount     = amount,
+        newBalance = bridge.player.getMoney(source, 'bank'),
+    }
+)
+```
+
+---
+
+## bridge.ui.* (Client)
+
+Module: `modules/ui/client.lua` — client only. *(v2.2.0)*
+
+Framework-agnostic UI lifecycle hooks so menu resources never branch on the
+framework in their open/close code. Redefinable via the `overrides/` folder.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `beforeOpening` | `fun(uiType?: string): boolean` | Call before opening a full-screen NUI menu. Blocks inventory (`LocalPlayer.state.invBusy = true`) and closes ox_inventory if present. Returns `true`. |
+| `afterClosing` | `fun(uiType?: string): boolean` | Call after a menu closes — from BOTH the NUI close callback AND any forced/server close — to release the focus-side effects set by `beforeOpening`. |
+| `beforeAction` | `fun(action: string): boolean` | Call before a gated menu action. Override to add checks; return `false` to veto. |
+| `afterAction` | `fun(action: string, ok: boolean): boolean` | Call after a menu action completes. Passthrough hook (returns `ok`). |
+
+```lua
+local bridge = exports['nb-bridge']:get()
+
+RegisterNUICallback('open', function(_, cb)
+    bridge.ui.beforeOpening('bank')
+    SetNuiFocus(true, true)
+    cb('ok')
+end)
+
+RegisterNUICallback('close', function(_, cb)
+    SetNuiFocus(false, false)
+    bridge.ui.afterClosing('bank') -- also call this from any server-forced close
+    cb('ok')
+end)
+```
+
+---
+
 ## bridge.diagnostics()
 
 Module: `modules/diagnostics/server.lua` — server only.
@@ -1684,7 +1816,7 @@ Also callable as `exports['nb-bridge']:diagnostics()` from any other resource.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `version` | `string` | nb-bridge version, e.g. `'2.0.0'` |
+| `version` | `string` | nb-bridge version, e.g. `'2.2.0'` |
 | `framework` | `'ESX'\|'QBCore'\|'QBX'\|'none'` | Detected framework |
 | `inventorySystem` | `string\|nil` | Active inventory system, or `'not yet resolved'` if called before the 500ms detection completes |
 | `side` | `string` | Always `'server'` |
@@ -1722,7 +1854,7 @@ Registered automatically at nb-bridge startup. Prints formatted diagnostics to t
 
 ```
 [nb-bridge] Diagnostics
-  Version:    2.0.0
+  Version:    2.2.0
   Framework:  QBX
   Inventory:  ox_inventory
   Uptime:     142.3s
@@ -1805,7 +1937,9 @@ Payload for receive: `requestId (number)`, `...response`
 | `QBCore:Client:OnPlayerUnload` | QBCore / QBX | `onPlayerUnloaded` client |
 | `QBCore:Client:OnJobUpdate` | QBCore / QBX | `onJobUpdate` client |
 | `QBCore:Client:OnGangUpdate` | QBCore / QBX | `onGangUpdate` client |
+| `esx:addAccountMoney` / `esx:removeAccountMoney` / `esx:setAccountMoney` | ESX | `onMoneyChanged` server |
+| `QBCore:Server:OnMoneyChange` | QBCore / QBX | `onMoneyChanged` server |
 
 ---
 
-*Neenbyss Studios — nb-bridge v2.0.0*
+*Neenbyss Studios — nb-bridge v2.2.0*
