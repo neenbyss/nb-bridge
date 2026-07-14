@@ -44,6 +44,7 @@ globals = {
     "DrawNotification",
     "PerformHttpRequest",
     "LocalPlayer",
+    "GetInvokingResource",
     "source",
     -- Entity / ped natives
     "GetPlayerPed",
