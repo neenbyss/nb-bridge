@@ -12,6 +12,12 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ## [2.4.0] — 2026-07-23
 
+Verified against **`ox_inventory` v2.50.0** and **`nb-inventory` v0.6.0** — see
+`README.md`'s Supported Inventory Systems table for the version each system in
+this release was checked against. If either resource's API changes in a later
+version, that table is the reference point for what this release actually
+tested, not just "any modern version".
+
 ### Added
 - **`nb-inventory` support** in the inventory module — Neenbyss's own standalone
   inventory resource is now a fifth detectable/routable `Bridge.InventorySystem`
@@ -20,12 +26,12 @@ The project follows [Semantic Versioning](https://semver.org/):
   - `addItem`/`removeItem`/`hasItem`/`canCarry` route through nb-inventory's own
     `AddItem`/`RemoveItem`/`HasItem`/`CanCarryItem` exports (argument order matches
     nb-bridge's own one-to-one).
-  - `registerStash` now also enforces `jobName` on nb-inventory: since
-    nb-inventory's own `RegisterStash` has no job/group gating concept at all
-    (proximity-only), the bridge auto-registers a
-    `Hooks.RegisterPreHook('stashOpen', ...)` scoped to that stash's container id,
-    checking `bridge.player.getJob` before letting a player in — replicating the
-    real restriction instead of silently dropping it.
+  - `registerStash` passes `jobName` through as nb-inventory's own native
+    `groups = { jobName }` option (`RegisterStash`'s `groups` field, added in
+    nb-inventory v0.6.0 — checked via `Stash.CanAccess` before proximity, same
+    convention as its shops). Requires nb-inventory **v0.6.0 or later**; on an
+    older nb-inventory, an unknown `groups` field is silently ignored and the
+    stash is unrestricted, same as passing no `jobName` at all.
   - `forceOpenPlayerInventory` routes through nb-inventory's `Admin.OpenInspect`,
     which is gated by nb-inventory's own `Config.AdminGroups` (a separate admin
     definition from `BridgeConfig.AdminGroups`) — only succeeds for a caller
@@ -36,14 +42,6 @@ The project follows [Semantic Versioning](https://semver.org/):
     nb-inventory's own `nui://nb-inventory/web/images/%s.png` convention.
 
 ### Known limitations (not fixed in this release)
-- **`registerStash`'s job-gate hook is tied to nb-bridge's own resource
-  lifecycle.** The veto callback is a closure defined inside nb-bridge, so
-  nb-inventory's `GetInvokingResource()` attributes it to `'nb-bridge'` — not to
-  whichever consumer resource actually called `registerStash`. Restarting
-  nb-bridge alone (without also restarting every consumer that registered a
-  job-gated stash) causes nb-inventory to auto-remove those hooks, silently
-  opening the stash to everyone until each consumer re-registers it. No clean
-  fix exists within nb-bridge alone.
 - **`forceOpenStash` cannot bypass proximity on nb-inventory.** Unlike
   ox_inventory's `ignoreSecurityChecks` flag, nb-inventory's `Inventory.OpenStash`
   always enforces proximity server-side when the stash has coords — this call is

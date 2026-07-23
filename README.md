@@ -18,15 +18,18 @@ Detection order at boot: **QBX → ESX → QBCore**. QBX is checked first becaus
 
 ## Supported Inventory Systems
 
-| System | Resource | Notes |
-|--------|----------|-------|
-| `ox_inventory` | `ox_inventory` | Full support including per-slot metadata |
-| `qb-inventory` | `qb-inventory` | Full support |
-| `qs-inventory` | `qs-inventory` | Full support |
-| `origen_inventory` | `origen_inventory` | Full support; image path defaults to v2 layout |
-| `default` | — | Falls back to framework item API |
+| System | Resource | Verified against | Notes |
+|--------|----------|-------------------|-------|
+| `ox_inventory` | `ox_inventory` | v2.50.0 | Full support including per-slot metadata |
+| `nb-inventory` | `nb-inventory` | v0.6.0 | Full support; stash job/gang gating requires v0.6.0+ (native `groups` on `RegisterStash`) |
+| `qb-inventory` | `qb-inventory` | any modern version | Full support |
+| `qs-inventory` | `qs-inventory` | any modern version | Full support |
+| `origen_inventory` | `origen_inventory` | any modern version | Full support; image path defaults to v2 layout |
+| `default` | — | — | Falls back to framework item API |
 
 Auto-detected at startup (~500 ms after boot). Do not read `Bridge.InventorySystem` at file-load time.
+
+"Verified against" is the exact version this bridge's integration was checked against at release time — not a hard minimum unless stated otherwise (e.g. nb-inventory's `groups` gating). If either resource's export signatures change in a later version, check the CHANGELOG entry for the nb-bridge release in question to see what was actually tested.
 
 ---
 
