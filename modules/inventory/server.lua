@@ -266,40 +266,19 @@ function Bridge.inventory.registerStash(stashId, label, jobName, coords)
             coords
         )
     elseif inv == 'nb-inventory' then
+        -- nb-inventory v0.6.0+ added native `groups` gating on RegisterStash
+        -- (Stash.CanAccess, checked before proximity — server/stashes.lua),
+        -- checked against Bridge.Framework.GetGroups (job AND gang names).
+        -- Earlier nb-inventory versions (< v0.6.0) have no such option and
+        -- silently ignore an unknown `groups` field — jobName has no effect
+        -- on those, same as passing nil.
         exports['nb-inventory']:RegisterStash(stashId, {
             label = label,
             slots = slots,
             maxWeight = maxWeight,
             coords = coords,
+            groups = jobName and { jobName } or nil,
         })
-
-        -- nb-inventory's own RegisterStash has no job/group gating concept at
-        -- all (server/stashes.lua) — access is proximity-only, or vetoed
-        -- externally via its own Hooks.RegisterPre. Reproduce nb-bridge's
-        -- jobName contract (ox_inventory's `groups = {[jobName] = 0}`, i.e.
-        -- any grade of that job) as a veto hook scoped to THIS stash's
-        -- containerId, so passing jobName here doesn't silently leave the
-        -- stash open to everyone.
-        -- KNOWN LIMITATION: this hook's callback closure is defined here, in
-        -- nb-bridge's own environment, so nb-inventory's GetInvokingResource()
-        -- attributes hook ownership to 'nb-bridge' — NOT to whichever consumer
-        -- resource actually called registerStash. nb-inventory auto-removes
-        -- every hook owned by a resource on that resource's own
-        -- onResourceStop. Restarting nb-bridge ALONE (without also restarting
-        -- every consumer that registered a job-gated stash) silently strips
-        -- the job gate from every such stash until each consumer re-runs its
-        -- own registerStash call. There is no clean fix within nb-bridge
-        -- alone — registeredStashes is itself reset on an nb-bridge restart,
-        -- so nb-bridge has nothing to re-register from. Left unfixed,
-        -- pending a broader per-consumer hook-ownership pattern (same class
-        -- of tradeoff as the AdminGroups cascade limitation, v2.3.0).
-        if jobName then
-            local containerId = 'stash:' .. stashId
-            exports['nb-inventory']:RegisterPreHook('stashOpen', function(payload)
-                local job = Bridge.player.getJob(payload.source)
-                return job ~= nil and job.name == jobName
-            end, { inventory = containerId })
-        end
     elseif inv == 'qs-inventory' then
         exports['qs-inventory']:RegisterStash(stashId, slots, maxWeight)
     elseif inv == 'origen_inventory' then
