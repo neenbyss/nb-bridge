@@ -10,6 +10,21 @@ The project follows [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [2.3.1] — 2026-07-23
+
+### Fixed
+- **`bridge.inventory.getItemMetadata` on `ox_inventory` always returned `nil`.** It called
+  `exports.ox_inventory:GetItem(source, itemName, nil, false)`, but that export's 4th
+  argument is `returnsCount` — not a slot selector. With `false`, `GetItem` returns a
+  cloned copy of the item's static definition (from the server's item list) with an
+  aggregate `.count` attached; it never carries a specific inventory slot's metadata,
+  and no item definition ships a `metadata` field of its own, so the lookup silently
+  resolved to `nil` on every call. Switched to `exports.ox_inventory:GetSlotWithItem`,
+  which returns the actual matching slot (with its real `.metadata`) — the correct
+  export for this lookup.
+
+---
+
 ## [2.3.0] — 2026-07-14
 
 ### Fixed
@@ -224,6 +239,10 @@ First public release.
 
 ---
 
+[2.3.1]: https://github.com/neenbyss/nb-bridge/releases/tag/v2.3.1
+[2.3.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v2.3.0
+[2.2.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v2.2.0
+[2.1.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v2.1.0
 [2.0.0]: https://github.com/neenbyss/nb-bridge/releases/tag/v2.0.0
 [1.2.2]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.2
 [1.2.1]: https://github.com/neenbyss/nb-bridge/releases/tag/v1.2.1
