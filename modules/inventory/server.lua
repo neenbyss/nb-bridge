@@ -422,13 +422,11 @@ function Bridge.inventory.getItemMetadata(source, itemName)
     local inv = ResolveInventorySystem()
 
     if inv == 'ox_inventory' then
-        -- GetItem(source, itemName, metadataFilter, returnsAll)
-        -- metadataFilter = nil means no filter; returnsAll = false → returns first match object
-        local item = exports.ox_inventory:GetItem(source, itemName, nil, false)
-        if item and type(item) == 'table' then
-            return item.metadata
-        end
-        return nil
+        -- GetSlotWithItem(inv, itemName, metadata, strict) returns the first matching
+        -- SlotWithItem, which carries the real per-slot .metadata. GetItem's 4th param
+        -- is `returnsCount`, not a slot selector — it never exposes slot metadata.
+        local slotData = exports.ox_inventory:GetSlotWithItem(source, itemName)
+        return slotData and slotData.metadata or nil
     end
 
     -- Other inventory systems don't expose per-slot item metadata via the bridge
