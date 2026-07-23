@@ -15,6 +15,8 @@ CreateThread(function()
     Wait(500)
     if GetResourceState('ox_inventory') == 'started' then
         inventorySystem = 'ox_inventory'
+    elseif GetResourceState('nb-inventory') == 'started' then
+        inventorySystem = 'nb-inventory'
     elseif GetResourceState('qb-inventory') == 'started' then
         inventorySystem = 'qb-inventory'
     elseif GetResourceState('qs-inventory') == 'started' then
@@ -36,6 +38,8 @@ local function ResolveInventorySystem()
     if inventorySystem then return inventorySystem end
     if GetResourceState('ox_inventory') == 'started' then
         inventorySystem = 'ox_inventory'
+    elseif GetResourceState('nb-inventory') == 'started' then
+        inventorySystem = 'nb-inventory'
     elseif GetResourceState('qb-inventory') == 'started' then
         inventorySystem = 'qb-inventory'
     elseif GetResourceState('qs-inventory') == 'started' then
@@ -56,6 +60,11 @@ function Bridge.inventory.openStash(stashId)
     Debugger('Inventory', 'openStash:', stashId, '| system:', inv)
     if inv == 'ox_inventory' then
         exports.ox_inventory:openInventory('stash', stashId)
+    elseif inv == 'nb-inventory' then
+        -- Server resolves Inventory.OpenStash(stashId, source) and, on
+        -- success, pushes containerSlots to us — the client's own
+        -- containerSlots handler is what actually opens the NUI panel.
+        TriggerServerEvent('nb-inventory:server:openStash', stashId)
     elseif inv == 'qb-inventory' or inv == 'qs-inventory' then
         TriggerServerEvent('inventory:server:OpenInventory', 'stash', stashId)
         TriggerEvent('inventory:client:SetCurrentStash', stashId)
@@ -70,6 +79,13 @@ function Bridge.inventory.openPlayerInventory(targetServerId)
     local inv = ResolveInventorySystem()
     if inv == 'ox_inventory' then
         exports.ox_inventory:openInventory('player', targetServerId)
+    elseif inv == 'nb-inventory' then
+        -- nb-inventory's Admin.OpenInspect is server-export-only (no
+        -- client-facing net event) and gated by its own admin-groups check —
+        -- this only actually opens anything for a caller nb-inventory itself
+        -- considers an admin. See nb-bridge:server:nbInventoryOpenPlayerInventory
+        -- in modules/inventory/server.lua.
+        TriggerServerEvent('nb-bridge:server:nbInventoryOpenPlayerInventory', targetServerId)
     elseif inv == 'qb-inventory' or inv == 'qs-inventory' then
         TriggerServerEvent('inventory:server:OpenInventory', 'otherplayer', targetServerId)
     elseif inv == 'origen_inventory' then
@@ -86,6 +102,15 @@ function Bridge.inventory.getItemCount(item)
     if inv == 'ox_inventory' then
         local count = exports.ox_inventory:GetItemCount(item)
         return count or 0
+    elseif inv == 'nb-inventory' then
+        -- nb-inventory exposes no client-side item-count query (its NUI
+        -- reads slot state from its own Redux store, not a Lua export) —
+        -- an explicit branch here is required, not just an omission: without
+        -- it this would silently fall through to the Bridge.Framework
+        -- branches below and return a count from the FRAMEWORK's own
+        -- native inventory, which does not reflect nb-inventory's real
+        -- state at all. Unsupported for now; always 0.
+        return 0
     elseif inv == 'qs-inventory' then
         local result = exports['qs-inventory']:Search(item)
         return result or 0

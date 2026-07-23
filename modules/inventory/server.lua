@@ -1,7 +1,7 @@
 -- ================================================
 -- INVENTORY BRIDGE - SERVER
 -- Unified inventory API for multiple systems.
--- Supports: ox_inventory, qb-inventory, qs-inventory,
+-- Supports: ox_inventory, nb-inventory, qb-inventory, qs-inventory,
 --           origen_inventory, framework defaults (ESX/QBCore/QBX)
 -- All methods live under Bridge.inventory.*
 -- ================================================
@@ -18,6 +18,8 @@ CreateThread(function()
     Wait(500)
     if GetResourceState('ox_inventory') == 'started' then
         inventorySystem = 'ox_inventory'
+    elseif GetResourceState('nb-inventory') == 'started' then
+        inventorySystem = 'nb-inventory'
     elseif GetResourceState('qb-inventory') == 'started' then
         inventorySystem = 'qb-inventory'
     elseif GetResourceState('qs-inventory') == 'started' then
@@ -40,6 +42,8 @@ local function ResolveInventorySystem()
     if inventorySystem then return inventorySystem end
     if GetResourceState('ox_inventory') == 'started' then
         inventorySystem = 'ox_inventory'
+    elseif GetResourceState('nb-inventory') == 'started' then
+        inventorySystem = 'nb-inventory'
     elseif GetResourceState('qb-inventory') == 'started' then
         inventorySystem = 'qb-inventory'
     elseif GetResourceState('qs-inventory') == 'started' then
@@ -78,6 +82,9 @@ function Bridge.inventory.addItem(source, item, count, metadata, slot)
 
     if inv == 'ox_inventory' then
         return exports.ox_inventory:AddItem(source, item, count, metadata, slot)
+    elseif inv == 'nb-inventory' then
+        local success = exports['nb-inventory']:AddItem(source, item, count, metadata, slot)
+        return success == true
     elseif inv == 'qs-inventory' then
         return exports['qs-inventory']:AddItem(source, item, count, slot, metadata)
     elseif inv == 'origen_inventory' then
@@ -119,6 +126,9 @@ function Bridge.inventory.removeItem(source, item, count, metadata, slot)
     if inv == 'ox_inventory' then
         local success = exports.ox_inventory:RemoveItem(source, item, count, metadata, slot)
         return success ~= false
+    elseif inv == 'nb-inventory' then
+        local success = exports['nb-inventory']:RemoveItem(source, item, count, metadata, slot)
+        return success == true
     elseif inv == 'qs-inventory' then
         exports['qs-inventory']:RemoveItem(source, item, count, slot, metadata)
         return true
@@ -159,6 +169,8 @@ function Bridge.inventory.hasItem(source, item, count)
     if inv == 'ox_inventory' then
         local itemCount = exports.ox_inventory:GetItemCount(source, item)
         return itemCount and itemCount >= count or false
+    elseif inv == 'nb-inventory' then
+        return exports['nb-inventory']:HasItem(source, item, count) == true
     elseif inv == 'qs-inventory' then
         local totalAmount = exports['qs-inventory']:GetItemTotalAmount(source, item)
         return totalAmount and totalAmount >= count or false
@@ -201,6 +213,8 @@ function Bridge.inventory.canCarry(source, item, count, metadata)
 
     if inv == 'ox_inventory' then
         return exports.ox_inventory:CanCarryItem(source, item, count, metadata)
+    elseif inv == 'nb-inventory' then
+        return exports['nb-inventory']:CanCarryItem(source, item, count, metadata) == true
     elseif inv == 'qs-inventory' then
         return exports['qs-inventory']:CanCarryItem(source, item, count)
     elseif inv == 'origen_inventory' then
@@ -251,6 +265,41 @@ function Bridge.inventory.registerStash(stashId, label, jobName, coords)
             groups,
             coords
         )
+    elseif inv == 'nb-inventory' then
+        exports['nb-inventory']:RegisterStash(stashId, {
+            label = label,
+            slots = slots,
+            maxWeight = maxWeight,
+            coords = coords,
+        })
+
+        -- nb-inventory's own RegisterStash has no job/group gating concept at
+        -- all (server/stashes.lua) — access is proximity-only, or vetoed
+        -- externally via its own Hooks.RegisterPre. Reproduce nb-bridge's
+        -- jobName contract (ox_inventory's `groups = {[jobName] = 0}`, i.e.
+        -- any grade of that job) as a veto hook scoped to THIS stash's
+        -- containerId, so passing jobName here doesn't silently leave the
+        -- stash open to everyone.
+        -- KNOWN LIMITATION: this hook's callback closure is defined here, in
+        -- nb-bridge's own environment, so nb-inventory's GetInvokingResource()
+        -- attributes hook ownership to 'nb-bridge' — NOT to whichever consumer
+        -- resource actually called registerStash. nb-inventory auto-removes
+        -- every hook owned by a resource on that resource's own
+        -- onResourceStop. Restarting nb-bridge ALONE (without also restarting
+        -- every consumer that registered a job-gated stash) silently strips
+        -- the job gate from every such stash until each consumer re-runs its
+        -- own registerStash call. There is no clean fix within nb-bridge
+        -- alone — registeredStashes is itself reset on an nb-bridge restart,
+        -- so nb-bridge has nothing to re-register from. Left unfixed,
+        -- pending a broader per-consumer hook-ownership pattern (same class
+        -- of tradeoff as the AdminGroups cascade limitation, v2.3.0).
+        if jobName then
+            local containerId = 'stash:' .. stashId
+            exports['nb-inventory']:RegisterPreHook('stashOpen', function(payload)
+                local job = Bridge.player.getJob(payload.source)
+                return job ~= nil and job.name == jobName
+            end, { inventory = containerId })
+        end
     elseif inv == 'qs-inventory' then
         exports['qs-inventory']:RegisterStash(stashId, slots, maxWeight)
     elseif inv == 'origen_inventory' then
@@ -278,6 +327,13 @@ function Bridge.inventory.forceOpenStash(source, stashId)
     local inv = ResolveInventorySystem()
     if inv == 'ox_inventory' then
         exports.ox_inventory:forceOpenInventory(source, 'stash', stashId)
+    elseif inv == 'nb-inventory' then
+        -- Inventory.OpenStash is always proximity-gated server-side — there
+        -- is no ignore-security-checks parameter like ox_inventory's
+        -- forceOpenInventory. This call is a no-op (no client push, no error)
+        -- if `source` isn't actually near the stash's registered coords;
+        -- "force" here only means skipping the normal keybind/command trigger.
+        exports['nb-inventory']:OpenStash(stashId, source)
     elseif inv == 'qs-inventory' then
         TriggerClientEvent('inventory:server:OpenInventory', source, 'stash', stashId)
     elseif inv == 'origen_inventory' then
@@ -302,6 +358,15 @@ function Bridge.inventory.forceOpenPlayerInventory(source, targetServerId)
             Debugger('Inventory', 'forceOpenInventory failed:', err)
         end
         return ok
+    elseif inv == 'nb-inventory' then
+        -- nb-inventory has no generic "view any player's inventory"
+        -- primitive — only Admin.OpenInspect (server/admin.lua), gated by
+        -- Config.AdminGroups via nb-inventory's OWN Bridge.Framework.
+        -- GetPermissionGroups (a different admin-group source than
+        -- nb-bridge's own BridgeConfig.AdminGroups). A caller using this for
+        -- a non-admin use case (e.g. "police search a suspect") will simply
+        -- get `false` back if `source` isn't in nb-inventory's own admin groups.
+        return exports['nb-inventory']:OpenInspect(source, targetServerId) == true
     elseif inv == 'qb-inventory' then
         -- qb-inventory uses a specific event with proper args
         TriggerClientEvent('inventory:client:OpenInventory', source, {}, 'otherplayer', targetServerId)
@@ -331,6 +396,12 @@ function Bridge.inventory.getAllItems()
 
     if inv == 'ox_inventory' then
         return exports.ox_inventory:Items() or {}
+    elseif inv == 'nb-inventory' then
+        -- Field names differ from ox_inventory's shape (nb-inventory uses
+        -- `stackable`/`closeOnUse`, not `stack`/`close`) — callers that
+        -- branch on specific field names must account for this per system,
+        -- same as they already do for qs-inventory/origen_inventory below.
+        return exports['nb-inventory']:GetItems() or {}
     elseif inv == 'qs-inventory' then
         return exports['qs-inventory']:GetItemList() or {}
     elseif inv == 'origen_inventory' then
@@ -382,6 +453,27 @@ function Bridge.inventory.registerUsableItem(itemName, cb)
         return ok
     end
 
+    -- nb-inventory has no per-item callback registry — 'use' is a single
+    -- generic hook event (server/hooks.lua) filtered by item name, firing
+    -- POST-consume (item already decremented), matching the same
+    -- post-consume contract every framework branch below follows. NOTE:
+    -- unlike ESX/QBCore/QBX, nb-inventory ALSO fires this same 'use'
+    -- post-hook for weapon-equip and container-open "uses" (Inventory.
+    -- UseItem treats those as special cases of the same call) — a callback
+    -- registered here for a weapon or container-kind item will fire even
+    -- though nothing was actually consumed.
+    if inv == 'nb-inventory' then
+        local ok = pcall(function()
+            exports['nb-inventory']:RegisterPostHook('use', function(payload)
+                cb(payload.source, { name = payload.itemName, slot = payload.slot })
+            end, { item = itemName })
+        end)
+        if not ok then
+            Debugger('Inventory', 'nb-inventory:RegisterPostHook failed for', itemName)
+        end
+        return ok
+    end
+
     if Bridge.Framework == 'ESX' then
         Bridge.FrameworkObject.RegisterUsableItem(itemName, function(source, itemSlot)
             cb(source, { name = itemName, slot = itemSlot })
@@ -427,9 +519,32 @@ function Bridge.inventory.getItemMetadata(source, itemName)
         -- is `returnsCount`, not a slot selector — it never exposes slot metadata.
         local slotData = exports.ox_inventory:GetSlotWithItem(source, itemName)
         return slotData and slotData.metadata or nil
+    elseif inv == 'nb-inventory' then
+        -- No "find by item name" export exists (only GetSlots/GetSlot by
+        -- exact slot number) — scan the full slot table for the first match,
+        -- same first-match semantics as ox_inventory's GetSlotWithItem above.
+        local slots = exports['nb-inventory']:GetSlots(source) or {}
+        for _, item in pairs(slots) do
+            if item.name == itemName then
+                return item.metadata
+            end
+        end
+        return nil
     end
 
     -- Other inventory systems don't expose per-slot item metadata via the bridge
     return nil
 end
+
+-- ================================================
+-- NB-INVENTORY: server-triggered player-inspect helper.
+-- nb-inventory's Admin.OpenInspect is server-export-only (no client-facing
+-- net event of its own) — bridge.inventory.openPlayerInventory (client)
+-- routes through this event so a client-initiated request still reaches
+-- Admin.OpenInspect's own admin check server-side.
+-- ================================================
+RegisterNetEvent('nb-bridge:server:nbInventoryOpenPlayerInventory', function(targetServerId)
+    if ResolveInventorySystem() ~= 'nb-inventory' then return end
+    exports['nb-inventory']:OpenInspect(source, targetServerId)
+end)
 

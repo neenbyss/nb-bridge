@@ -35,6 +35,7 @@ BridgeConfig = {
     -- so we pick v2 as the default and leave v1 opt-in.
     InventoryImagePaths = {
         ox_inventory      = 'nui://ox_inventory/web/images/%s.png',
+        ['nb-inventory']  = 'nui://nb-inventory/web/images/%s.png',
         ['qb-inventory']  = 'nui://qb-inventory/html/images/%s.png',
         ['ps-inventory']  = 'nui://ps-inventory/html/images/%s.png',
         ['lj-inventory']  = 'nui://lj-inventory/html/images/%s.png',
